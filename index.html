@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>模擬課程成效儀表板</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap">
+<style>
+/* Layout: 海報式漫畫風儀表板——橘色放射光芒標頭＋粗黑框貼紙卡；黑底分頁籤；卡片標題用螢光筆底線。前測＝橘、後測＝深綠 */
+:root{
+  --ground:#F2661B; --ground-deep:#E3550D; --ink:#1B1410; --paper:#FFF8EE; --card:#FFFFFF; --pop:#FFD84D;
+  --pre:#E8711C; --post:#17805A; --navy:#1B1410; --navy-2:#2B2420;
+  --bg:#FFF3E3; --ink-2:#4F4038; --muted:#7D6A5C; --line:#1B1410; --grid:#F1E6D8;
+  --neg2:#C2412D; --neg1:#EBA48F; --mid:#D9D2C8; --pos1:#7FC3A0; --pos2:#17805A;
+  --good:#127A52; --warn:#B7791F; --bad:#C2412D;
+  --f:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  --sh:4px 4px 0 var(--ink);
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{background:var(--bg)}
+body{margin:0;font-family:var(--f);color:var(--ink);font-size:14.5px;line-height:1.55;
+  background-image:radial-gradient(rgba(27,20,16,.07) 1.2px, transparent 1.3px);background-size:16px 16px}
+.num,td.n,.kpi b{font-variant-numeric:tabular-nums}
+
+header.top{color:var(--ink);padding-inline:16px;padding-block:22px 0;border-bottom:4px solid var(--ink);
+  background:repeating-conic-gradient(from 0deg at 50% 120%, var(--ground) 0deg 6deg, var(--ground-deep) 6deg 12deg);background-color:var(--ground)}
+.top-in{max-width:1180px;margin:0 auto}
+.top-row{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:14px}
+.eyebrow{display:inline-block;background:var(--card);border:3px solid var(--ink);border-radius:12px;padding:3px 12px;font-size:14px;font-weight:900;box-shadow:3px 3px 0 var(--ink);transform:rotate(-2deg);margin-bottom:8px}
+h1{margin:0;font-size:clamp(34px,6vw,60px);font-weight:900;line-height:1.08;letter-spacing:.03em;color:var(--pop);
+  -webkit-text-stroke:8px var(--ink);paint-order:stroke fill;text-shadow:5px 6px 0 var(--ink);text-wrap:balance}
+h1 .w{color:#fff}
+.status{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px;color:var(--ink);font-weight:700}
+.chip{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 12px;font-weight:900;font-size:12.5px;border:2.5px solid var(--ink);background:var(--card)}
+.chip.live{background:#D7F2E3;color:#0F5E40}
+.chip.demo{background:var(--pop);color:var(--ink)}
+.chip .dot{width:8px;height:8px;border-radius:50%;background:currentColor}
+#updated{background:rgba(255,255,255,.85);border:2px solid var(--ink);border-radius:999px;padding:1px 10px}
+.btn{font:inherit;font-weight:900;font-size:14px;border-radius:12px;border:3px solid var(--ink);background:var(--pop);color:var(--ink);padding:5px 14px;cursor:pointer;box-shadow:3px 3px 0 var(--ink)}
+.btn:hover{transform:translate(-1px,-1px);box-shadow:4px 4px 0 var(--ink)}
+.btn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
+.btn:focus-visible,.tab:focus-visible,select:focus-visible,.cc:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+nav.tabs{display:flex;gap:8px;margin-top:18px;overflow-x:auto;scrollbar-width:none;padding-top:4px}
+.tab{font:inherit;font-weight:900;font-size:17px;color:#fff;background:var(--ink);border:3px solid var(--ink);border-bottom:0;padding:8px 18px 9px;border-radius:14px 14px 0 0;cursor:pointer;white-space:nowrap;letter-spacing:.04em}
+.tab:hover{color:var(--pop)}
+.tab[aria-selected="true"]{background:var(--bg);color:var(--ink);position:relative;top:4px;padding-bottom:13px}
+
+main{max-width:1180px;margin:0 auto;padding-inline:16px;padding-block:22px 56px;display:flex;flex-direction:column;gap:22px}
+.filters{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;font-size:14px}
+.filters label{font-weight:900;background:var(--ink);color:#fff;border-radius:8px;padding:2px 10px}
+select{font:inherit;font-size:14px;font-weight:700;border:2.5px solid var(--ink);background:var(--card);border-radius:10px;padding:5px 8px;color:var(--ink);box-shadow:2px 2px 0 var(--ink)}
+.legend{display:flex;gap:10px;align-items:center;margin-left:auto;font-size:13px;font-weight:900}
+.lg{display:inline-flex;align-items:center;gap:6px;background:var(--card);border:2.5px solid var(--ink);border-radius:999px;padding:2px 12px}
+.lg i{width:12px;height:12px;border-radius:50%;display:inline-block}
+.lg i.pre{background:#fff;border:3px solid var(--pre)}
+.lg i.post{background:var(--post)}
+
+.card{background:var(--card);border:3px solid var(--ink);border-radius:18px;padding:20px 20px 18px;min-width:0;box-shadow:var(--sh)}
+.card h2{margin:0 0 4px;font-size:clamp(20px,2.4vw,24px);font-weight:900;color:var(--ink);letter-spacing:.03em;display:inline;
+  background:linear-gradient(transparent 58%, var(--pop) 58%, var(--pop) 92%, transparent 92%);padding:0 4px}
+.card .sub{margin:8px 0 14px;font-size:13px;color:var(--muted);font-weight:500}
+.card h2 + .tw,.card h2 + .lk,.card h2 + div{margin-top:14px}
+.grid{display:grid;gap:22px}
+.g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (max-width:860px){.g2{grid-template-columns:1fr}}
+
+.kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px}
+@media (max-width:980px){.kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:520px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.kpi{background:var(--card);border:3px solid var(--ink);border-radius:16px;padding:12px 14px;min-width:0;box-shadow:var(--sh)}
+.kpi:nth-child(odd){background:var(--paper)}
+.kpi span{display:inline-block;font-size:13px;color:#fff;background:var(--ink);font-weight:900;border-radius:7px;padding:0 8px}
+.kpi b{display:block;font-size:clamp(24px,2.6vw,32px);font-weight:900;color:var(--ink);line-height:1.2;margin-top:6px;letter-spacing:.01em}
+.kpi b small{font-size:14px;color:var(--ink-2);font-weight:700}
+.kpi em{display:block;font-style:normal;font-size:12.5px;color:var(--ink-2);font-weight:500}
+.up{color:var(--good)!important}.down{color:var(--bad)!important}
+
+.ccards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+@media (max-width:1000px){.ccards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:520px){.ccards{grid-template-columns:1fr}}
+.cc{background:var(--card);border:3px solid var(--ink);border-radius:18px;padding:14px 16px;display:flex;flex-direction:column;gap:8px;cursor:pointer;text-align:left;font:inherit;color:inherit;box-shadow:var(--sh);transition:transform .1s, box-shadow .1s}
+.cc:hover{transform:translate(-2px,-2px);box-shadow:6px 6px 0 var(--ink);background:var(--paper)}
+.cc-head{display:flex;align-items:center;gap:10px}
+.cc-no{font-weight:900;font-size:22px;color:#fff;background:var(--ground);border:3px solid var(--ink);border-radius:10px;padding:0 8px;line-height:1.35;flex:none}
+.cc h3{margin:0;font-size:20px;font-weight:900;color:var(--ink);line-height:1.25}
+.cc .badges{display:flex;gap:6px;flex-wrap:wrap;min-height:26px}
+.badge{font-size:12.5px;font-weight:900;border-radius:999px;padding:1px 10px;background:var(--pop);color:var(--ink);border:2.5px solid var(--ink);transform:rotate(-2deg)}
+.badge.g{background:var(--post);color:#fff}
+.cc dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:13.5px}
+.cc dt{color:var(--muted);font-weight:500}
+.cc dd{margin:0;text-align:right;font-weight:900;font-variant-numeric:tabular-nums}
+.cc .more{font-size:13.5px;color:var(--ink);font-weight:900;margin-top:2px}
+.cc .more b{color:var(--ground)}
+
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{font-size:12.5px;color:#fff;background:var(--ink);font-weight:900;text-align:left;padding:7px 9px;white-space:nowrap}
+th:first-child{border-radius:8px 0 0 8px}th:last-child{border-radius:0 8px 8px 0}
+td{padding:7px 9px;border-bottom:1.5px dashed #E4D6C4;vertical-align:middle}
+td.n,th.n{text-align:right;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+.heat td.h{text-align:center;font-weight:900;border-radius:8px;border:3px solid var(--card);white-space:nowrap;font-size:14px}
+.flag{font-size:12px;font-weight:900;border-radius:7px;padding:1px 8px;white-space:nowrap;border:2px solid var(--ink)}
+.flag.ok{background:#D7F2E3;color:#0F5E40}
+.flag.miss{background:var(--pop);color:var(--ink)}
+.p-sig{color:var(--good);font-weight:900}
+.note{font-size:12.5px;color:var(--muted);margin-top:10px}
+
+svg{display:block;width:100%;height:auto;overflow:visible}
+svg text{font-family:var(--f)}
+.ax{fill:var(--muted);font-size:11px;font-weight:700}
+.lbl{fill:var(--ink);font-size:12.5px;font-weight:500}
+.val{fill:var(--ink-2);font-size:12px;font-weight:900}
+.hit{fill:transparent;cursor:default}
+.tip{position:fixed;z-index:20;pointer-events:none;background:var(--ink);color:#fff;font-size:12.5px;line-height:1.45;border-radius:10px;padding:7px 10px;max-width:280px;border:2px solid var(--pop)}
+
+.bars{display:flex;flex-direction:column;gap:8px}
+.bar-row{display:grid;grid-template-columns:minmax(0,12em) 1fr 3.4em;gap:10px;align-items:center;font-size:13.5px}
+.bar-row .t{min-width:0;overflow-wrap:anywhere;line-height:1.35}
+.bar-track{height:14px;background:var(--grid);border-radius:999px;overflow:hidden;border:2px solid var(--ink)}
+.bar-fill{height:100%;background:var(--ink-2);border-radius:999px}
+.bar-row .v{text-align:right;font-weight:900;color:var(--ink);font-variant-numeric:tabular-nums}
+@media (max-width:520px){.bar-row{grid-template-columns:minmax(0,8em) 1fr 3em}}
+.sec{display:inline-block;font-weight:900;font-size:14px;margin:16px 0 8px;border-bottom:3px solid var(--ground)}
+.sec:first-child{margin-top:0}
+
+.lk{display:flex;flex-direction:column;gap:10px}
+.lk-row{display:grid;grid-template-columns:minmax(0,15em) 1fr 3.2em;gap:10px;align-items:center;font-size:13.5px}
+.lk-bar{display:flex;height:18px;border-radius:6px;overflow:hidden;gap:2px;background:var(--card);border:2px solid var(--ink)}
+.lk-bar span{height:100%}
+.lk-row .m{font-weight:900;text-align:right;color:var(--ink);font-size:15px;font-variant-numeric:tabular-nums}
+@media (max-width:620px){.lk-row{grid-template-columns:1fr 3em}.lk-row .t{grid-column:1/-1}}
+.lk-key{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--ink-2);margin-top:10px;font-weight:500}
+.lk-key i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:4px;vertical-align:-1px;border:1.5px solid var(--ink)}
+
+.fb{display:flex;flex-direction:column;gap:8px;max-height:380px;overflow:auto;padding-right:2px}
+.fb-item{background:var(--paper);border:2px solid var(--ink);border-radius:12px;padding:8px 12px;font-size:14px}
+.fb-item small{display:block;color:var(--muted);font-size:11.5px}
+.empty{color:var(--muted);font-size:13.5px;padding:8px 0}
+.hide-sm{}
+@media (max-width:620px){.hide-sm{display:none}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+</head>
+<body>
+<header class="top">
+  <div class="top-in">
+    <div class="top-row">
+      <div>
+        <div class="eyebrow">奇美醫院 臨床技能中心</div>
+        <h1><span class="w">模擬課程</span>成效儀表板</h1>
+      </div>
+      <div class="status">
+        <span class="chip" id="srcChip"><span class="dot"></span><span id="srcText">載入中</span></span>
+        <span id="updated"></span>
+        <button class="btn" id="reload" type="button">重新整理</button>
+      </div>
+    </div>
+    <nav class="tabs" role="tablist" id="tabs"></nav>
+  </div>
+</header>
+
+<main id="main">
+  <div class="filters">
+    <label for="fId">身分</label>
+    <select id="fId"><option value="">全部</option><option>UGY</option><option>PGY1</option><option>PGY2</option><option>住院醫師</option></select>
+    <label for="fSes" id="fSesL">場次</label>
+    <select id="fSes"><option value="">全部場次</option></select>
+    <div class="legend"><span class="lg"><i class="pre"></i>前測</span><span class="lg"><i class="post"></i>後測</span></div>
+  </div>
+  <div id="view"></div>
+</main>
+<div class="tip" id="tip" hidden></div>
+
+<script>
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbwQkTfzyyIxux8yMf93oNTXn5YeXMQ2BUCgBypVnjHsgmf7LtLoTzrqWwEJB1pZ7_EC/exec';
+
+const COURSES = [
+  { id: 'echo', short: '心臟超音波', name: '心臟超音波課程', skills: ['選擇探頭並設定心臟超音波模式與參數', '取得標準切面（PLAX、PSAX、A4C、Subcostal）', '目視評估左心室收縮功能', '辨識心包膜積液', '判斷右心室是否擴大', '評估下腔靜脈（IVC）大小與呼吸變化'] },
+  { id: 'endo', short: '內視鏡', name: '內視鏡模擬課程', skills: ['檢查前準備與病人安全評估（禁食、抗凝血藥物、鎮靜風險）', '正確握持內視鏡並以旋鈕控制鏡頭方向', '插入食道並通過幽門進入十二指腸', '執行胃內反轉（retroflexion）觀察賁門與胃底', '依系統化順序完整觀察並拍攝標準位置影像', '辨識常見病灶（如潰瘍、出血點、腫瘤）', '執行組織切片'] },
+  { id: 'abd', short: '腹部超音波', name: '腹部超音波課程', skills: ['依切面需求選擇探頭並設定機器參數', '取得右上腹肝腎介面（Morison’s pouch）影像', '取得左上腹脾腎介面影像', '取得骨盆腔（膀胱周圍）影像', '判斷腹腔內是否有游離液體', '辨識膽囊並評估有無膽結石', '測量腹主動脈直徑'] },
+  { id: 'lap', short: '腹腔鏡', name: '腹腔鏡課程', career: true, skills: ['氣腹建立與 trocar 置放原則', '扶鏡並維持穩定、置中視野（含 30 度鏡）', '克服支點效應，器械方向正確', '在 2D 螢幕判斷深度與距離', '雙手協調操作（含非慣用手）', '以抓鉗轉移物件（peg transfer）', '腔內縫合與打結', '安全使用電燒等能量器械'] },
+];
+const SAT = ['課程內容符合我的學習需求與上課前的期待', '講師的示範與回饋清楚、具體且有幫助', '模擬器／教具有助於我練習與學習', '課程所學對我未來的臨床工作有幫助', '我會推薦其他學員參加此課程'];
+const SAT_SHORT = ['課程內容', '講師教學', '模擬設備', '臨床應用', '推薦意願'];
+const EXP = ['從未使用過', '1–3 次', '4–10 次', '超過 10 次'];
+const IDS = ['UGY', 'PGY1', 'PGY2', '住院醫師'];
+
+// ---------- helpers ----------
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const num = v => { if (v == null || v === '') return null; if (typeof v === 'number') return v; const m = String(v).match(/^\s*(\d)/); return m ? +m[1] : null; };
+const mean = a => { const b = a.filter(x => x != null && !isNaN(x)); return b.length ? b.reduce((s, x) => s + x, 0) / b.length : null; };
+const sd = a => { const m = mean(a); if (a.length < 2 || m == null) return null; return Math.sqrt(a.reduce((s, x) => s + (x - m) ** 2, 0) / (a.length - 1)); };
+const f1 = v => v == null ? '—' : v.toFixed(2);
+const fd = v => v == null ? '—' : (v > 0 ? '+' : '') + v.toFixed(2);
+const pct = (a, b) => b ? Math.round(a / b * 100) + '%' : '—';
+const normName = s => String(s || '').replace(/\s+/g, '').trim();
+const TZ = 'Asia/Taipei';
+function toDate(v) {
+  if (!v) return null;
+  if (v instanceof Date) return v;
+  const s = String(v);
+  const m = s.match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})(?:[ T](?:(上午|下午))?\s*(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (m && !/Z$|[+-]\d\d:?\d\d$/.test(s)) {
+    let h = +(m[5] || 0); if (m[4] === '下午' && h < 12) h += 12; if (m[4] === '上午' && h === 12) h = 0;
+    return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], h - 8, +(m[6] || 0), +(m[7] || 0)));
+  }
+  const d = new Date(s); return isNaN(d) ? null : d;
+}
+const dayKey = d => d ? d.toLocaleDateString('sv-SE', { timeZone: TZ }) : '未知日期';
+
+// Wilcoxon signed-rank：小樣本精確（排列）檢定，大樣本常態近似
+function wilcoxon(diffs) {
+  const d = diffs.filter(x => x !== 0 && x != null);
+  const n = d.length; if (n < 3) return { n, p: null };
+  const abs = d.map((x, i) => ({ a: Math.abs(x), i })).sort((x, y) => x.a - y.a);
+  const rank = Array(n);
+  for (let i = 0; i < n;) { let j = i; while (j + 1 < n && abs[j + 1].a === abs[i].a) j++; const r = (i + j + 2) / 2; for (let k = i; k <= j; k++) rank[abs[k].i] = r; i = j + 1; }
+  const Wp = d.reduce((s, x, i) => s + (x > 0 ? rank[i] : 0), 0);
+  const total = rank.reduce((s, r) => s + r, 0);
+  const obs = Math.min(Wp, total - Wp);
+  if (n <= 18) {
+    let cnt = 0, N = 1 << n;
+    for (let m = 0; m < N; m++) { let w = 0; for (let k = 0; k < n; k++) if (m & (1 << k)) w += rank[k]; if (Math.min(w, total - w) <= obs + 1e-9) cnt++; }
+    return { n, p: Math.min(1, cnt / N) };
+  }
+  const mu = n * (n + 1) / 4, s = Math.sqrt(n * (n + 1) * (2 * n + 1) / 24);
+  const z = (Math.abs(Wp - mu) - .5) / s;
+  const p = 2 * (1 - normCdf(z));
+  return { n, p };
+}
+function normCdf(z) { const t = 1 / (1 + .2316419 * Math.abs(z)); const d = .3989423 * Math.exp(-z * z / 2); const p = d * t * (.3193815 + t * (-.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274)))); return z > 0 ? 1 - p : p; }
+const fp = p => p == null ? '樣本不足' : p < .001 ? '< .001' : p.toFixed(3).replace(/^0/, '');
+
+// ---------- data ----------
+let RAW = null, SOURCE = 'demo';
+const state = { tab: 'overview', id: '', ses: '' };
+
+async function load() {
+  $('#srcText').textContent = '載入中';
+  $('#srcChip').className = 'chip';
+  let data = null, err = '';
+  if (GAS_URL) {
+    try {
+      const r = await fetch(GAS_URL + (GAS_URL.includes('?') ? '&' : '?') + 't=' + Date.now());
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      data = await r.json();
+    } catch (e) { err = String(e.message || e); }
+  }
+  if (data) { RAW = data; SOURCE = 'live'; }
+  else { RAW = demoData(); SOURCE = 'demo'; }
+  $('#srcChip').className = 'chip ' + SOURCE;
+  $('#srcText').textContent = SOURCE === 'live' ? 'Google Sheet 即時資料' : '示範資料';
+  $('#srcChip').title = SOURCE === 'demo' ? (err ? '無法讀取 Google Sheet（' + err + '），目前顯示示範資料' : '目前顯示示範資料') : '';
+  $('#updated').textContent = '更新於 ' + new Date().toLocaleTimeString('zh-TW', { hour12: false, timeZone: TZ });
+  render();
+}
+
+function rowsFor(c, phase) {
+  const sheet = RAW[`${c.short}_${phase}`] || [];
+  return sheet.map(r => ({ ...r, _d: toDate(r['時間戳記']), _name: normName(r['姓名']) }))
+    .filter(r => r._name);
+}
+function latestByName(rows) {
+  const m = new Map();
+  rows.forEach(r => { const o = m.get(r._name); if (!o || (r._d && o._d && r._d > o._d)) m.set(r._name, r); });
+  return [...m.values()];
+}
+function courseData(c, filt = true) {
+  let pre = latestByName(rowsFor(c, '前測')), post = latestByName(rowsFor(c, '後測'));
+  const sessions = [...new Set([...pre, ...post].map(r => dayKey(r._d)))].sort();
+  if (filt) {
+    if (state.id) { pre = pre.filter(r => r['身分'] === state.id); post = post.filter(r => r['身分'] === state.id); }
+    if (state.ses) { pre = pre.filter(r => dayKey(r._d) === state.ses); post = post.filter(r => dayKey(r._d) === state.ses); }
+  }
+  const conf = (r, s) => num(r[`信心｜${s}`]);
+  const confMean = r => mean(c.skills.map(s => conf(r, s)));
+  const postBy = new Map(post.map(r => [r._name, r]));
+  const pairs = pre.filter(r => postBy.has(r._name)).map(r => ({ name: r['姓名'], id: r['身分'] || postBy.get(r._name)['身分'], pre: r, post: postBy.get(r._name) }));
+  const skills = c.skills.map(s => {
+    const diffs = pairs.map(p => { const a = conf(p.pre, s), b = conf(p.post, s); return a != null && b != null ? b - a : null; }).filter(x => x != null);
+    return { s, pre: mean(pre.map(r => conf(r, s))), post: mean(post.map(r => conf(r, s))), d: mean(diffs), w: wilcoxon(diffs) };
+  });
+  const confDiffs = pairs.map(p => { const a = confMean(p.pre), b = confMean(p.post); return a != null && b != null ? b - a : null; }).filter(x => x != null);
+  const readyDiffs = pairs.map(p => { const a = num(p.pre['臨床準備度']), b = num(p.post['臨床準備度']); return a != null && b != null ? b - a : null; }).filter(x => x != null);
+  const sat = SAT.map(s => post.map(r => num(r[`滿意度｜${s}`])).filter(x => x != null));
+  const overall = post.map(r => num(r['整體滿意度'])).filter(x => x != null);
+  return {
+    c, pre, post, pairs, sessions, skills, confMean,
+    confPre: mean(pre.map(confMean)), confPost: mean(post.map(confMean)),
+    confD: mean(confDiffs), confW: wilcoxon(confDiffs), confDz: confDiffs.length > 1 && sd(confDiffs) ? mean(confDiffs) / sd(confDiffs) : null,
+    readyPre: mean(pre.map(r => num(r['臨床準備度']))), readyPost: mean(post.map(r => num(r['臨床準備度']))),
+    readyD: mean(readyDiffs), readyW: wilcoxon(readyDiffs),
+    sat, satMeans: sat.map(mean), satAll: mean(sat.flat()), overall: mean(overall), overallArr: overall,
+    recommend: sat[4].length ? sat[4].filter(x => x >= 4).length / sat[4].length : null,
+    practiceLow: post.length ? post.filter(r => r['實作練習時間'] === '太少').length / post.length : null,
+  };
+}
+
+// ---------- tabs ----------
+function renderTabs() {
+  const tabs = [{ id: 'overview', label: '課程總覽' }, ...COURSES.map(c => ({ id: c.id, label: c.short }))];
+  $('#tabs').innerHTML = tabs.map(t => `<button class="tab" role="tab" type="button" data-t="${t.id}" aria-selected="${state.tab === t.id}">${t.label}</button>`).join('');
+  $('#tabs').querySelectorAll('.tab').forEach(b => b.onclick = () => go(b.dataset.t));
+}
+function go(t) {
+  state.tab = t; state.ses = '';
+  try { history.replaceState(null, '', '#' + t); } catch (e) {}
+  render(); window.scrollTo({ top: 0 });
+}
+
+function render() {
+  renderTabs();
+  const course = COURSES.find(c => c.id === state.tab);
+  // session filter only on course pages
+  $('#fSes').hidden = $('#fSesL').hidden = !course;
+  if (course) {
+    const sess = courseData(course, false).sessions;
+    $('#fSes').innerHTML = '<option value="">全部場次</option>' + sess.map(s => `<option value="${s}" ${s === state.ses ? 'selected' : ''}>${s}</option>`).join('');
+  }
+  $('#view').innerHTML = course ? viewCourse(course) : viewOverview();
+  bindTips();
+}
+
+// ---------- overview ----------
+function viewOverview() {
+  const D = COURSES.map(c => courseData(c));
+  const totPre = D.reduce((s, d) => s + d.pre.length, 0), totPost = D.reduce((s, d) => s + d.post.length, 0), totPair = D.reduce((s, d) => s + d.pairs.length, 0);
+  const allDiff = D.flatMap(d => d.pairs.map(p => { const a = d.confMean(p.pre), b = d.confMean(p.post); return a != null && b != null ? b - a : null; })).filter(x => x != null);
+  const allOverall = D.flatMap(d => d.overallArr);
+  const eligible = D.filter(d => d.pairs.length >= 3);
+  const bestGain = eligible.length ? eligible.reduce((a, b) => (b.confD ?? -9) > (a.confD ?? -9) ? b : a) : null;
+  const elig2 = D.filter(d => d.overallArr.length >= 3);
+  const bestSat = elig2.length ? elig2.reduce((a, b) => (b.overall ?? 0) + (b.satAll ?? 0) / 100 > (a.overall ?? 0) + (a.satAll ?? 0) / 100 ? b : a) : null;
+
+  const kpis = `<div class="kpis">
+    ${kpi('前測份數', totPre, '四門課合計')}
+    ${kpi('後測份數', totPost, '四門課合計')}
+    ${kpi('前後測都完成', totPair, '後測回收 ' + pct(totPair, totPre))}
+    ${kpi('平均信心提升', allDiff.length ? fd(mean(allDiff)) : '—', '同一人前後差，5 分量表', allDiff.length ? (mean(allDiff) > 0 ? 'up' : 'down') : '')}
+    ${kpi('平均整體滿意度', allOverall.length ? f1(mean(allOverall)) + '<small> / 5</small>' : '—', allOverall.length + ' 份後測')}
+    ${kpi('推薦同意率', (() => { const a = D.flatMap(d => d.sat[4]); return a.length ? pct(a.filter(x => x >= 4).length, a.length) : '—'; })(), '「會推薦其他學員」勾 4–5 分')}
+  </div>`;
+
+  const cards = `<div class="ccards">${D.map(d => `
+    <button class="cc" type="button" data-go="${d.c.id}">
+      <div class="cc-head"><span class="cc-no">${String(COURSES.indexOf(d.c) + 1).padStart(2, '0')}</span><h3>${d.c.name}</h3></div>
+      <div class="badges">${d === bestGain ? '<span class="badge g">學習成效最佳</span>' : ''}${d === bestSat ? '<span class="badge">學員最滿意</span>' : ''}</div>
+      <dl>
+        <dt>前測／後測</dt><dd>${d.pre.length}／${d.post.length} 份</dd>
+        <dt>技能信心</dt><dd>${f1(d.confPre)} → ${f1(d.confPost)}</dd>
+        <dt>同一人提升</dt><dd class="${d.confD > 0 ? 'up' : ''}">${fd(d.confD)}</dd>
+        <dt>臨床準備度</dt><dd>${f1(d.readyPre)} → ${f1(d.readyPost)}</dd>
+        <dt>整體滿意度</dt><dd>${f1(d.overall)}</dd>
+      </dl>
+      <span class="more">查看課程分析 <b>›››</b></span>
+    </button>`).join('')}</div>`;
+
+  const dumb = card('各課程技能信心：前測 → 後測', '每門課所有技能的平均自評信心（1–5 分）；右側為同一人前後平均提升。', dumbbell(D.map(d => ({ label: d.c.short, pre: d.confPre, post: d.confPost, d: d.confD, tip: `${d.c.name}<br>前測 ${f1(d.confPre)}（${d.pre.length} 份）<br>後測 ${f1(d.confPost)}（${d.post.length} 份）<br>同一人平均提升 ${fd(d.confD)}（${d.pairs.length} 人）` })), { labelW: 84, W: 500 }));
+
+  const dims = [
+    { k: '信心提升', v: d => d.confD, fmt: fd, scale: [0, 2] },
+    { k: '準備度提升', v: d => d.readyD, fmt: fd, scale: [0, 2] },
+    ...SAT_SHORT.map((s, i) => ({ k: s, v: d => d.satMeans[i], fmt: f1, scale: [3, 5] })),
+    { k: '整體滿意', v: d => d.overall, fmt: f1, scale: [3, 5] },
+  ];
+  const heat = card('構面比較', '前兩欄為學習成效（同一人後測減前測），其餘為後測滿意度平均（1–5 分）。顏色越深代表表現越好。', `
+    <div class="tw"><table class="heat"><thead><tr><th>課程</th>${dims.map(x => `<th class="n" style="text-align:center">${x.k}</th>`).join('')}<th class="n">後測 n</th></tr></thead>
+    <tbody>${D.map(d => `<tr><td><b>${d.c.short}</b></td>${dims.map(x => heatCell(x.v(d), x.fmt, x.scale)).join('')}<td class="n">${d.post.length}</td></tr>`).join('')}</tbody></table></div>
+    <div class="note">樣本小（每場上限 6 人）時排名容易受個別學員影響；「學習成效最佳」「學員最滿意」標籤只在該課程有 3 人以上資料時才顯示。</div>`);
+
+  const satCmp = card('各課程滿意度分布', '整體滿意度 1–5 分的人數比例。', likertRows(D.map(d => ({ t: d.c.short, arr: d.overallArr }))) + lkKey(['非常不滿意', '不滿意', '普通', '滿意', '非常滿意']));
+
+  const pr = card('實作時間與推薦', '實作練習時間勾「太少」的比例，與推薦同意率。', `<div class="tw"><table><thead><tr><th>課程</th><th class="n">實作時間太少</th><th class="n">推薦同意率</th><th class="n">後測 n</th></tr></thead><tbody>
+    ${D.map(d => `<tr><td>${d.c.short}</td><td class="n">${d.practiceLow == null ? '—' : Math.round(d.practiceLow * 100) + '%'}</td><td class="n">${d.recommend == null ? '—' : Math.round(d.recommend * 100) + '%'}</td><td class="n">${d.post.length}</td></tr>`).join('')}
+    </tbody></table></div>`);
+
+  setTimeout(() => document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go)));
+  return `<div class="grid">${kpis}${cards}<div class="grid g2">${dumb}${satCmp}</div>${heat}${pr}</div>`;
+}
+
+// ---------- course page ----------
+function viewCourse(c) {
+  const d = courseData(c);
+  if (!d.pre.length && !d.post.length) return `<div class="card"><h2>${c.name}</h2><p class="empty">目前沒有符合篩選條件的填答資料。學員送出問卷後，資料會出現在這裡。</p></div>`;
+  const kpis = `<div class="kpis">
+    ${kpi('前測', d.pre.length + '<small> 份</small>', '')}
+    ${kpi('後測', d.post.length + '<small> 份</small>', '')}
+    ${kpi('前後測都完成', d.pairs.length + '<small> 人</small>', '後測回收 ' + pct(d.pairs.length, d.pre.length))}
+    ${kpi('技能信心', f1(d.confPre) + ' → ' + f1(d.confPost), '同一人提升 ' + fd(d.confD) + (d.confW.p != null ? '｜p ' + fp(d.confW.p) : ''), d.confD > 0 ? 'up' : '')}
+    ${kpi('臨床準備度', f1(d.readyPre) + ' → ' + f1(d.readyPost), '同一人提升 ' + fd(d.readyD) + (d.readyW.p != null ? '｜p ' + fp(d.readyW.p) : ''), d.readyD > 0 ? 'up' : '')}
+    ${kpi('整體滿意度', f1(d.overall) + '<small> / 5</small>', '推薦同意率 ' + (d.recommend == null ? '—' : Math.round(d.recommend * 100) + '%'))}
+  </div>`;
+
+  const skillChart = card('各技能信心：前測 → 後測', '點為所有填答者平均（1–5 分），右側為同一人前後平均提升；滑過可看檢定結果。',
+    dumbbell(d.skills.map((s, i) => ({ label: String.fromCharCode(97 + i) + '. ' + s.s, pre: s.pre, post: s.post, d: s.d,
+      tip: `${esc(s.s)}<br>前測 ${f1(s.pre)}｜後測 ${f1(s.post)}<br>同一人提升 ${fd(s.d)}（${s.w.n} 人有變化）<br>Wilcoxon p ${fp(s.w.p)}` })), { labelW: 340, W: 1100 }) +
+    `<div class="tw" style="margin-top:12px"><table><thead><tr><th>技能</th><th class="n">前測</th><th class="n">後測</th><th class="n">同一人提升</th><th class="n">p 值</th></tr></thead><tbody>
+    ${d.skills.map((s, i) => `<tr><td>${String.fromCharCode(97 + i)}. ${esc(s.s)}</td><td class="n">${f1(s.pre)}</td><td class="n">${f1(s.post)}</td><td class="n ${s.d > 0 ? 'up' : ''}">${fd(s.d)}</td><td class="n ${s.w.p != null && s.w.p < .05 ? 'p-sig' : ''}">${fp(s.w.p)}</td></tr>`).join('')}
+    </tbody></table></div><div class="note">p 值為 Wilcoxon 符號等級檢定（同一人前後比較，小樣本採精確檢定）；p &lt; .05 以綠字標示。有變化的人數少於 3 人時顯示「樣本不足」。</div>`);
+
+  const satCard = card('課程滿意度', `後測 ${d.post.length} 份，各題 1–5 分分布。`,
+    likertRows([...SAT.map((s, i) => ({ t: SAT_SHORT[i] + '｜' + s, arr: d.sat[i] })), { t: '整體滿意度', arr: d.overallArr }]) +
+    lkKey(['非常不同意／非常不滿意', '不同意', '普通', '同意', '非常同意'])) ;
+
+  const readyCard = card('臨床準備度與實作時間', '',
+    `<div class="sec">臨床準備度（1 完全沒準備好 → 5 完全準備好）</div>` +
+    distCompare([1, 2, 3, 4, 5].map(String), d.pre.map(r => String(num(r['臨床準備度']))), d.post.map(r => String(num(r['臨床準備度'])))) +
+    `<div class="sec">實作練習時間</div>` + bars(count(d.post.map(r => r['實作練習時間']), ['太少', '剛好', '太多']), d.post.length));
+
+  const bg = card('學員背景（前測）', `前測 ${d.pre.length} 份`,
+    `<div class="sec">身分</div>` + bars(count(d.pre.map(r => r['身分']), IDS), d.pre.length) +
+    `<div class="sec">上課前實際操作次數</div>` + bars(count(d.pre.map(r => r['操作次數']), EXP), d.pre.length) +
+    `<div class="sec">曾參加相關課程</div>` + bars(count(d.pre.map(r => r['曾參加相關課程']), ['是', '否']), d.pre.length));
+
+  const expect = card('課前期待與擔心', '最希望學到（可複選）與最擔心的部分',
+    `<div class="sec">最希望學到</div>` + bars(countMulti(d.pre.map(r => r['最希望學到'])), d.pre.length, true) +
+    `<div class="sec">最擔心</div>` + bars(count(d.pre.map(r => r['最擔心'])), d.pre.length, true));
+
+  let career = '';
+  if (c.career) {
+    career = card('外科職涯意向', '腹腔鏡課程專屬題組',
+      `<div class="sec">課前：未來走外科系的意願</div>` + bars(count(d.pre.map(r => r['外科意願']), ['1 完全不考慮', '2 不太可能', '3 不確定', '4 可能會', '5 幾乎確定']), d.pre.length) +
+      `<div class="sec">課前：最可能選擇的專科方向</div>` + bars(count(d.pre.map(r => r['專科方向'])), d.pre.length, true) +
+      `<div class="sec">課後：這堂課對走外科意願的影響</div>` + bars(count(d.post.map(r => r['對外科意願的影響']), ['明顯提高', '稍微提高', '沒有影響', '稍微降低', '明顯降低']), d.post.length));
+  }
+
+  // 填答追蹤
+  const names = new Map();
+  d.pre.forEach(r => names.set(r._name, { name: r['姓名'], id: r['身分'], pre: r }));
+  d.post.forEach(r => { const o = names.get(r._name) || { name: r['姓名'], id: r['身分'] }; o.post = r; names.set(r._name, o); });
+  const people = [...names.values()].sort((a, b) => (!!a.post - !!b.post) || (!!a.pre - !!b.pre) || String(a.name).localeCompare(b.name, 'zh-Hant'));
+  const missing = people.filter(p => !p.pre || !p.post).length;
+  const track = card('填答追蹤與個人變化', missing ? `有 ${missing} 人前後測尚未都完成，已排在最上方。` : '所有人前後測都已完成。',
+    `<div class="tw"><table><thead><tr><th>姓名</th><th>身分</th><th>前測</th><th>後測</th><th class="n">前測信心</th><th class="n">後測信心</th><th class="n">提升</th></tr></thead><tbody>
+    ${people.map(p => { const a = p.pre ? d.confMean(p.pre) : null, b = p.post ? d.confMean(p.post) : null; const df = a != null && b != null ? b - a : null;
+      return `<tr><td>${esc(p.name)}</td><td>${esc(p.id || '')}</td><td>${p.pre ? '<span class="flag ok">已填</span>' : '<span class="flag miss">未填</span>'}</td><td>${p.post ? '<span class="flag ok">已填</span>' : '<span class="flag miss">未填</span>'}</td><td class="n">${f1(a)}</td><td class="n">${f1(b)}</td><td class="n ${df > 0 ? 'up' : df < 0 ? 'down' : ''}">${fd(df)}</td></tr>`; }).join('')}
+    </tbody></table></div><div class="note">信心為該學員所有技能題的平均。同一人重複填答時，以最後一次為準。</div>`);
+
+  const fbList = (key) => { const items = d.post.filter(r => String(r[key] || '').trim()); return items.length ? `<div class="fb">${items.map(r => `<div class="fb-item">${esc(r[key])}<small>${esc(r['身分'] || '')}｜${dayKey(r._d)}</small></div>`).join('')}</div>` : '<p class="empty">尚無回饋</p>'; };
+  const fb = `<div class="grid g2">${card('最有幫助的內容', '後測簡答，依身分與日期顯示，不列姓名', fbList('最有幫助的內容'))}${card('回饋與建議', '學員想開的課程與想說的話', fbList('回饋與建議'))}</div>`;
+
+  return `<div class="grid">${kpis}${skillChart}<div class="grid g2">${satCard}${readyCard}</div><div class="grid g2">${bg}${expect}</div>${career}${track}${fb}</div>`;
+}
+
+// ---------- components ----------
+function kpi(label, val, sub, cls = '') { return `<div class="kpi"><span>${label}</span><b class="${cls}">${val}</b>${sub ? `<em>${sub}</em>` : ''}</div>`; }
+function card(title, sub, body) { return `<section class="card"><h2>${title}</h2>${sub ? `<p class="sub">${sub}</p>` : ''}${body}</section>`; }
+function count(arr, order) {
+  const m = new Map(); (order || []).forEach(o => m.set(o, 0));
+  arr.forEach(v => { if (v == null || v === '' || v === 'null') return; m.set(v, (m.get(v) || 0) + 1); });
+  let out = [...m.entries()]; if (!order) out.sort((a, b) => b[1] - a[1]); return out;
+}
+function countMulti(arr) { return count(arr.flatMap(v => String(v || '').split(/[；;]/).map(s => s.trim()).filter(Boolean))); }
+function bars(entries, total, wide) {
+  if (!entries.length || !total) return '<p class="empty">尚無資料</p>';
+  const max = Math.max(...entries.map(e => e[1]), 1);
+  return `<div class="bars">${entries.map(([k, v]) => `<div class="bar-row" ${wide ? 'style="grid-template-columns:minmax(0,16em) 1fr 3.4em"' : ''}><span class="t">${esc(k)}</span><div class="bar-track"><div class="bar-fill" style="width:${v / max * 100}%"></div></div><span class="v">${v}<small style="font-weight:500;color:var(--muted)"> 人</small></span></div>`).join('')}</div>`;
+}
+function distCompare(cats, a, b) {
+  const ca = count(a, cats), cb = count(b, cats);
+  const max = Math.max(1, ...ca.map(e => e[1]), ...cb.map(e => e[1]));
+  return `<div class="bars">${cats.map((k, i) => `<div class="bar-row" style="grid-template-columns:2.2em 1fr 3.4em"><span class="t"><b>${k}</b> 分</span>
+    <div style="display:flex;flex-direction:column;gap:3px"><div class="bar-track" style="height:9px"><div class="bar-fill" style="width:${ca[i][1] / max * 100}%;background:var(--pre)"></div></div><div class="bar-track" style="height:9px"><div class="bar-fill" style="width:${cb[i][1] / max * 100}%;background:var(--post)"></div></div></div>
+    <span class="v" style="font-size:11.5px;line-height:1.25">${ca[i][1]}<br>${cb[i][1]}</span></div>`).join('')}</div>`;
+}
+const LK = ['var(--neg2)', 'var(--neg1)', 'var(--mid)', 'var(--pos1)', 'var(--pos2)'];
+function likertRows(rows) {
+  return `<div class="lk">${rows.map(r => {
+    const n = r.arr.length; const c = [1, 2, 3, 4, 5].map(v => r.arr.filter(x => x === v).length);
+    const bar = n ? c.map((k, i) => k ? `<span class="hit-seg" data-tip="${esc(r.t)}<br>${i + 1} 分：${k} 人（${Math.round(k / n * 100)}%）" style="width:${k / n * 100}%;background:${LK[i]}"></span>` : '').join('') : '';
+    return `<div class="lk-row"><span class="t">${esc(r.t)}</span><div class="lk-bar">${bar || '<span style="width:100%;background:var(--grid)"></span>'}</div><span class="m">${n ? f1(mean(r.arr)) : '—'}</span></div>`;
+  }).join('')}</div>`;
+}
+function lkKey(labels) { return `<div class="lk-key">${labels.map((l, i) => `<span><i style="background:${LK[i]}"></i>${i + 1} ${l}</span>`).join('')}</div>`; }
+function heatCell(v, fmt, [lo, hi]) {
+  if (v == null) return `<td class="h" style="background:var(--grid);color:var(--muted)">—</td>`;
+  const t = Math.max(0, Math.min(1, (v - lo) / (hi - lo)));
+  // 單一色相（深綠）由淺到深
+  const L = 95 - t * 62;
+  const bg = `hsl(152 ${40 + t * 25}% ${L}%)`;
+  return `<td class="h" style="background:${bg};color:${L < 58 ? '#fff' : 'var(--ink)'}">${fmt(v)}</td>`;
+}
+// dumbbell：前測空心橘點 → 後測實心綠點，1–5 分刻度
+function dumbbell(rows, { labelW = 140, W = 760 } = {}) {
+  const rowH = 34, top = 22, right = 56, x0 = labelW + 12, x1 = W - right;
+  const H = top + rows.length * rowH + 8;
+  const X = v => x0 + (v - 1) / 4 * (x1 - x0);
+  const wrap = (s, max) => { const out = []; let cur = ''; for (const ch of s) { cur += ch; if (cur.length >= max) { out.push(cur); cur = ''; } } if (cur) out.push(cur); return out.slice(0, 2).map((l, i, a) => i === 1 && s.length > max * 2 ? l.slice(0, -1) + '…' : l); };
+  const maxCh = Math.floor(labelW / 12.5);
+  let g = '';
+  [1, 2, 3, 4, 5].forEach(v => { g += `<line x1="${X(v)}" x2="${X(v)}" y1="${top - 6}" y2="${H - 6}" stroke="var(--grid)" stroke-width="1"/><text class="ax" x="${X(v)}" y="${top - 10}" text-anchor="middle">${v}</text>`; });
+  rows.forEach((r, i) => {
+    const y = top + i * rowH + rowH / 2;
+    const lines = wrap(r.label, maxCh);
+    g += lines.map((l, k) => `<text class="lbl" x="${labelW}" y="${y + (k - (lines.length - 1) / 2) * 14 + 4}" text-anchor="end">${esc(l)}</text>`).join('');
+    if (r.pre != null && r.post != null) g += `<line x1="${X(r.pre)}" x2="${X(r.post)}" y1="${y}" y2="${y}" stroke="var(--line)" stroke-width="4" stroke-linecap="round"/>`;
+    if (r.pre != null) g += `<circle cx="${X(r.pre)}" cy="${y}" r="6" fill="#fff" stroke="var(--pre)" stroke-width="2.5"/>`;
+    if (r.post != null) g += `<circle cx="${X(r.post)}" cy="${y}" r="6.5" fill="var(--post)" stroke="#fff" stroke-width="2"/>`;
+    const d = r.d !== undefined ? r.d : (r.pre != null && r.post != null ? r.post - r.pre : null);
+    g += `<text class="val" x="${W - 4}" y="${y + 4}" text-anchor="end" style="fill:${d > 0 ? 'var(--good)' : 'var(--ink-2)'}">${d == null ? '—' : fd(d)}</text>`;
+    g += `<rect class="hit" x="0" y="${y - rowH / 2}" width="${W}" height="${rowH}" data-tip="${esc(r.tip || '')}"/>`;
+  });
+  return `<div class="tw ${W > 800 ? 'hide-sm' : ''}"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="前測與後測平均比較圖" style="min-width:520px">${g}</svg></div>`;
+}
+
+// tooltips
+function bindTips() {
+  const tip = $('#tip');
+  document.querySelectorAll('[data-tip]').forEach(el => {
+    el.addEventListener('mousemove', e => { if (!el.dataset.tip) return; tip.innerHTML = el.dataset.tip; tip.hidden = false;
+      const x = Math.min(e.clientX + 14, innerWidth - tip.offsetWidth - 8); tip.style.left = x + 'px'; tip.style.top = (e.clientY + 14) + 'px'; });
+    el.addEventListener('mouseleave', () => tip.hidden = true);
+  });
+}
+
+// ---------- filters ----------
+$('#fId').onchange = e => { state.id = e.target.value; render(); };
+$('#fSes').onchange = e => { state.ses = e.target.value; render(); };
+$('#reload').onclick = load;
+
+// ---------- 示範資料（未連上 Google Sheet 時顯示） ----------
+function demoData() {
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const pickW = (arr, w) => { let r = rnd() * w.reduce((a, b) => a + b, 0); for (let i = 0; i < arr.length; i++) { r -= w[i]; if (r <= 0) return arr[i]; } return arr[arr.length - 1]; };
+  const clamp = v => Math.max(1, Math.min(5, Math.round(v)));
+  const sur = '王林陳張李黃吳劉蔡楊許鄭謝郭洪邱曾廖賴周'.split(''), giv = ['冠宇', '怡君', '家豪', '雅婷', '承恩', '宜蓁', '柏翰', '佳穎', '彥廷', '詩涵', '俊傑', '心怡', '宗翰', '思妤', '品睿', '郁婷'];
+  const out = {};
+  const plan = [
+    { c: 'echo', ses: ['2026-10-14', '2026-11-11'], n: [6, 5], gain: 1.4, sat: 4.5, base: 1.9 },
+    { c: 'endo', ses: ['2026-10-20'], n: [6], gain: 1.1, sat: 4.2, base: 1.5 },
+    { c: 'abd', ses: ['2026-10-20', '2026-11-17'], n: [6, 6], gain: 1.6, sat: 4.6, base: 2.0 },
+    { c: 'lap', ses: ['2026-11-05'], n: [5], gain: 1.2, sat: 4.3, base: 1.4 },
+  ];
+  const helpful = ['實際在模擬器上反覆找切面，老師當場調整手勢', '老師把常見錯誤一個一個示範，很清楚', '小班 6 人，每個人都有足夠時間操作', '影像判讀的實例很實用', '終於搞懂探頭方向和畫面的對應'];
+  const sugg = ['希望可以開進階班！', '想學 POCUS 在休克評估的整合應用', '謝謝老師很有耐心～', '希望能有更多病例影像練習', '可以開縫合打結的課嗎'];
+  plan.forEach(p => {
+    const c = COURSES.find(x => x.id === p.c);
+    const pre = [], post = [];
+    p.ses.forEach((day, si) => {
+      for (let i = 0; i < p.n[si]; i++) {
+        const name = '示範' + sur[Math.floor(rnd() * sur.length)] + giv[Math.floor(rnd() * giv.length)];
+        const id = c.id === 'lap' ? pickW(IDS, [0, 9, 1, 0]) : pickW(IDS, [1, 1, 8, 1]);
+        const t = (h, m) => `${day.replace(/-/g, '/')} ${h}:${String(m).padStart(2, '0')}:00`;
+        const ability = rnd() * 1.2 - .6;
+        const r1 = { '時間戳記': t(13, Math.floor(rnd() * 10)), '問卷': '前測', '課程': c.name, '姓名': name, '身分': id,
+          '操作次數': pickW(EXP, [5, 3, 1, .3]), '曾參加相關課程': pickW(['是', '否'], [1, 3]),
+          '臨床準備度': String(clamp(p.base + ability + rnd() * .8)) };
+        const r2 = { '時間戳記': t(15, 10 + Math.floor(rnd() * 20)), '問卷': '後測', '課程': c.name, '姓名': name, '身分': id,
+          '臨床準備度': String(clamp(p.base + ability + p.gain + rnd() * .8 - .2)) };
+        c.skills.forEach((s, k) => {
+          const diff = (k % 3) * .25;
+          r1[`信心｜${s}`] = clamp(p.base + ability - diff + rnd() * 1.1 - .2);
+          r2[`信心｜${s}`] = clamp(p.base + ability - diff + p.gain + rnd() * 1.1 - .3);
+        });
+        r1['最希望學到'] = demoTopics(c.id, rnd).join('；');
+        r1['最擔心'] = demoWorry(c.id, rnd);
+        if (c.career) { r1['外科意願'] = pickW(['1 完全不考慮', '2 不太可能', '3 不確定', '4 可能會', '5 幾乎確定'], [1, 2, 3, 2, 1]); r1['專科方向'] = pickW(['外科系（一般外科、泌尿、婦產、大腸直腸、胸腔等需手術之科）', '非外科系（內科、家醫、急診、影像等）', '還沒決定'], [2, 2, 3]); r2['對外科意願的影響'] = pickW(['明顯提高', '稍微提高', '沒有影響', '稍微降低', '明顯降低'], [1, 3, 3, .3, .1]); }
+        SAT.forEach(s => r2[`滿意度｜${s}`] = clamp(p.sat + rnd() * 1.2 - .7));
+        r2['整體滿意度'] = String(clamp(p.sat + rnd() * 1.1 - .6));
+        r2['實作練習時間'] = pickW(['太少', '剛好', '太多'], [2, 7, .3]);
+        r2['最有幫助的內容'] = helpful[Math.floor(rnd() * helpful.length)];
+        r2['回饋與建議'] = rnd() > .5 ? sugg[Math.floor(rnd() * sugg.length)] : '';
+        pre.push(r1);
+        if (rnd() > .1) post.push(r2);
+      }
+    });
+    out[`${c.short}_前測`] = pre; out[`${c.short}_後測`] = post;
+  });
+  return out;
+}
+function demoTopics(id, rnd) {
+  const T = { echo: ['標準切面取得（PLAX、PSAX、A4C、Subcostal）', '左心室收縮功能目視評估', '心包膜積液辨識', '下腔靜脈（IVC）評估', '休克病人床邊評估流程'],
+    endo: ['握鏡姿勢與旋鈕操控', '插入食道與通過幽門', '胃內反轉（retroflexion）', '常見病灶辨識', '組織切片操作'],
+    abd: ['右上腹（肝腎介面）切面', '腹腔游離液體判讀（FAST）', '膽囊與膽結石評估', '骨盆腔（膀胱周圍）切面', '腹主動脈評估'],
+    lap: ['扶鏡技巧（含 30 度鏡）', '基本手眼協調（peg transfer、剪裁）', '腔內縫合與打結', '擔任扶鏡手／第一助手的角色與禁忌', '了解外科系的工作與職涯'] }[id];
+  const pickd = T.filter(() => rnd() > .5).slice(0, 3);
+  return pickd.length ? pickd : [T[0]];
+}
+function demoWorry(id, rnd) {
+  const W = { echo: ['找不到切面或影像品質不佳', '解剖構造辨識困難', '探頭方向與手部操作不順'], endo: ['鏡頭方向控制不順', '插入食道或通過幽門困難', '擔心造成病人不適或併發症'],
+    abd: ['找不到切面或影像被腸氣／肋骨遮蔽', '不確定是否為游離液體', '探頭方向與手部操作不順'], lap: ['手眼協調、器械方向相反（fulcrum effect）', '在 2D 畫面判斷深度', '扶鏡扶不好、跟不上主刀'] }[id];
+  return W[Math.floor(rnd() * W.length)];
+}
+
+// ---------- boot ----------
+(() => { const h = (location.hash || '').slice(1); if (h && (h === 'overview' || COURSES.some(c => c.id === h))) state.tab = h; })();
+load();
+</script>
+
+</body>
+</html>
