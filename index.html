@@ -141,6 +141,22 @@ svg text{font-family:var(--f)}
 .fb-item{background:var(--paper);border:2px solid var(--ink);border-radius:12px;padding:8px 12px;font-size:14px}
 .fb-item small{display:block;color:var(--muted);font-size:11.5px}
 .empty{color:var(--muted);font-size:13.5px;padding:8px 0}
+.insight{margin-top:16px;display:flex;gap:10px;align-items:flex-start;background:#FFF6D6;border:2.5px dashed var(--ink);border-radius:12px;padding:10px 12px}
+.insight b{flex:none;background:var(--ink);color:var(--pop);font-weight:900;font-size:13px;border-radius:7px;padding:1px 9px;margin-top:2px}
+.insight p{margin:0;font-size:14px;line-height:1.65;color:var(--ink);min-width:0}
+.gate{min-height:100vh;display:grid;place-items:center;padding-inline:16px;padding-block:32px;
+  background:repeating-conic-gradient(from 0deg at 50% 50%, var(--ground) 0deg 6deg, var(--ground-deep) 6deg 12deg);background-color:var(--ground)}
+.gate-card{width:100%;max-width:440px;background:var(--card);border:4px solid var(--ink);border-radius:22px;box-shadow:7px 7px 0 var(--ink);padding:26px 24px 22px;display:flex;flex-direction:column;gap:12px;text-align:center}
+.gate-card .eyebrow{align-self:center}
+.gate-h{font-size:clamp(32px,8vw,44px)}
+.gate-h .w{display:block}
+.gate-l{font-weight:900;font-size:16px;margin-top:6px}
+#pw{font:inherit;font-size:18px;text-align:center;border:3px solid var(--ink);border-radius:14px;padding:10px 12px;background:var(--paper);letter-spacing:.2em}
+#pw:focus{outline:none;box-shadow:0 0 0 3px var(--pop),3px 3px 0 var(--ink)}
+.gate-btn{font-size:20px;padding:10px 0}
+.gate-err{background:#FCE3DC;border:2px solid var(--ink);border-radius:10px;padding:6px 10px;font-weight:700;font-size:14px;color:#8A2412}
+.gate-note{margin:0;font-size:12.5px;color:var(--muted)}
+.btn-ghost{background:var(--card)}
 .hide-sm{}
 @media (max-width:620px){.hide-sm{display:none}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -148,6 +164,20 @@ svg text{font-family:var(--f)}
 
 </head>
 <body>
+<section class="gate" id="gate">
+  <form class="gate-card" id="loginForm" autocomplete="off">
+    <div class="eyebrow">奇美醫院 臨床技能中心</div>
+    <h1 class="gate-h"><span class="w">模擬課程</span>成效儀表板</h1>
+    <label class="gate-l" for="pw">請輸入管理密碼</label>
+    <input type="password" id="pw" placeholder="密碼" autocomplete="current-password">
+    <div class="gate-err" id="loginErr" hidden></div>
+    <button class="btn gate-btn" id="loginBtn" type="submit">進入儀表板</button>
+    <p class="gate-note">密碼由中心管理者在 Google Sheet「密碼管理」分頁設定。</p>
+    <p class="gate-note" id="demoHint" hidden>預覽版：輸入任意文字即可查看示範資料。</p>
+  </form>
+</section>
+
+<div id="app" hidden>
 <header class="top">
   <div class="top-in">
     <div class="top-row">
@@ -159,6 +189,7 @@ svg text{font-family:var(--f)}
         <span class="chip" id="srcChip"><span class="dot"></span><span id="srcText">載入中</span></span>
         <span id="updated"></span>
         <button class="btn" id="reload" type="button">重新整理</button>
+        <button class="btn btn-ghost" id="logout" type="button">登出</button>
       </div>
     </div>
     <nav class="tabs" role="tablist" id="tabs"></nav>
@@ -175,6 +206,7 @@ svg text{font-family:var(--f)}
   </div>
   <div id="view"></div>
 </main>
+</div>
 <div class="tip" id="tip" hidden></div>
 
 <script>
@@ -242,24 +274,61 @@ const fp = p => p == null ? '樣本不足' : p < .001 ? '< .001' : p.toFixed(3).
 let RAW = null, SOURCE = 'demo';
 const state = { tab: 'overview', id: '', ses: '' };
 
-async function load() {
-  $('#srcText').textContent = '載入中';
-  $('#srcChip').className = 'chip';
-  let data = null, err = '';
-  if (GAS_URL) {
-    try {
-      const r = await fetch(GAS_URL + (GAS_URL.includes('?') ? '&' : '?') + 't=' + Date.now());
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      data = await r.json();
-    } catch (e) { err = String(e.message || e); }
+let PW = '';
+const ss = { get(k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { v == null ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, v); } catch (e) {} } };
+
+// 向 GAS 取資料；回傳 { ok, data } 或 { ok:false, reason }
+async function fetchData(pw) {
+  if (!GAS_URL) return { ok: true, data: demoData(), demo: true };
+  try {
+    const r = await fetch(`${GAS_URL}${GAS_URL.includes('?') ? '&' : '?'}pw=${encodeURIComponent(pw)}&t=${Date.now()}`);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    if (j && j.ok === false) return { ok: false, reason: j.error === 'auth' ? 'auth' : 'server', msg: j.error };
+    return { ok: true, data: j.data || j };
+  } catch (e) { return { ok: false, reason: 'network', msg: String(e.message || e) }; }
+}
+
+async function login(e) {
+  if (e) e.preventDefault();
+  const pw = $('#pw').value.trim();
+  if (!pw) { showLoginErr('請輸入密碼'); return; }
+  $('#loginBtn').disabled = true; $('#loginBtn').textContent = '驗證中…';
+  const res = await fetchData(pw);
+  $('#loginBtn').disabled = false; $('#loginBtn').textContent = '進入儀表板';
+  if (!res.ok) {
+    showLoginErr(res.reason === 'auth' ? '密碼不正確，請再試一次。' : '暫時無法連線到資料來源，請稍後再試。');
+    return;
   }
-  if (data) { RAW = data; SOURCE = 'live'; }
-  else { RAW = demoData(); SOURCE = 'demo'; }
+  PW = pw; ss.set('sim_dash_pw', pw);
+  applyData(res);
+}
+function showLoginErr(t) { $('#loginErr').textContent = t; $('#loginErr').hidden = false; $('#pw').select(); }
+
+function applyData(res) {
+  RAW = res.data; SOURCE = res.demo ? 'demo' : 'live';
+  $('#gate').hidden = true; $('#app').hidden = false;
   $('#srcChip').className = 'chip ' + SOURCE;
   $('#srcText').textContent = SOURCE === 'live' ? 'Google Sheet 即時資料' : '示範資料';
-  $('#srcChip').title = SOURCE === 'demo' ? (err ? '無法讀取 Google Sheet（' + err + '），目前顯示示範資料' : '目前顯示示範資料') : '';
   $('#updated').textContent = '更新於 ' + new Date().toLocaleTimeString('zh-TW', { hour12: false, timeZone: TZ });
   render();
+}
+
+async function load() {
+  $('#srcText').textContent = '載入中';
+  const res = await fetchData(PW);
+  if (!res.ok) {
+    if (res.reason === 'auth') { logout('密碼已變更或停用，請重新登入。'); return; }
+    $('#srcText').textContent = '連線失敗'; $('#srcChip').className = 'chip demo'; return;
+  }
+  applyData(res);
+}
+
+function logout(msg) {
+  PW = ''; ss.set('sim_dash_pw', null); RAW = null;
+  $('#app').hidden = true; $('#gate').hidden = false; $('#pw').value = '';
+  if (msg) showLoginErr(msg); else $('#loginErr').hidden = true;
+  $('#pw').focus();
 }
 
 function rowsFor(c, phase) {
@@ -372,8 +441,7 @@ function viewOverview() {
   ];
   const heat = card('構面比較', '前兩欄為學習成效（同一人後測減前測），其餘為後測滿意度平均（1–5 分）。顏色越深代表表現越好。', `
     <div class="tw"><table class="heat"><thead><tr><th>課程</th>${dims.map(x => `<th class="n" style="text-align:center">${x.k}</th>`).join('')}<th class="n">後測 n</th></tr></thead>
-    <tbody>${D.map(d => `<tr><td><b>${d.c.short}</b></td>${dims.map(x => heatCell(x.v(d), x.fmt, x.scale)).join('')}<td class="n">${d.post.length}</td></tr>`).join('')}</tbody></table></div>
-    <div class="note">樣本小（每場上限 6 人）時排名容易受個別學員影響；「學習成效最佳」「學員最滿意」標籤只在該課程有 3 人以上資料時才顯示。</div>`);
+    <tbody>${D.map(d => `<tr><td><b>${d.c.short}</b></td>${dims.map(x => heatCell(x.v(d), x.fmt, x.scale)).join('')}<td class="n">${d.post.length}</td></tr>`).join('')}</tbody></table></div>`);
 
   const satCmp = card('各課程滿意度分布', '整體滿意度 1–5 分的人數比例。', likertRows(D.map(d => ({ t: d.c.short, arr: d.overallArr }))) + lkKey(['非常不滿意', '不滿意', '普通', '滿意', '非常滿意']));
 
@@ -381,8 +449,42 @@ function viewOverview() {
     ${D.map(d => `<tr><td>${d.c.short}</td><td class="n">${d.practiceLow == null ? '—' : Math.round(d.practiceLow * 100) + '%'}</td><td class="n">${d.recommend == null ? '—' : Math.round(d.recommend * 100) + '%'}</td><td class="n">${d.post.length}</td></tr>`).join('')}
     </tbody></table></div>`);
 
+  // ---- 分析註解 ----
+  const hasP = D.filter(d => d.confD != null), hasPost = D.filter(d => d.overall != null);
+  let iDumb = '尚無前後測都完成的學員，暫時無法比較各課程的學習成效。';
+  if (hasP.length) {
+    const hi = topBy(hasP, d => d.confD), lo = lowBy(hasP, d => d.confD);
+    const allUp = hasP.every(d => d.confD > 0);
+    const lowPre = D.filter(d => d.confPre != null).length ? lowBy(D.filter(d => d.confPre != null), d => d.confPre) : null;
+    iDumb = `${allUp ? '各課程學員的技能信心在課後都有提升。' : '有課程的技能信心課後沒有提升，建議檢視課程設計。'}同一人平均提升最多的是${q(hi.c.short)}（${fd(hi.confD)} 分）` +
+      (hasP.length > 1 ? `，最少的是${q(lo.c.short)}（${fd(lo.confD)} 分）。` : '。') +
+      (lowPre ? `課前信心最低的是${q(lowPre.c.short)}（${f1(lowPre.confPre)} 分），代表學員對這項技術最陌生，課程帶來的改變也最值得關注。` : '');
+  }
+  let iSat = '尚無後測資料。';
+  if (hasPost.length) {
+    const hi = topBy(hasPost, d => d.overall), lo = lowBy(hasPost, d => d.overall);
+    const all = hasPost.flatMap(d => d.overallArr), good = all.filter(x => x >= 4).length;
+    iSat = `整體滿意度最高的是${q(hi.c.short)}（${f1(hi.overall)} 分）` + (hasPost.length > 1 ? `，最低的是${q(lo.c.short)}（${f1(lo.overall)} 分）` : '') +
+      `。全部後測中有 ${pct(good, all.length)} 的學員給 4 分以上${good / all.length >= .8 ? '，整體評價相當正面' : '，仍有改善空間'}。`;
+  }
+  let iHeat = '資料累積後，這裡會比較各課程在每個構面的表現。';
+  if (hasPost.length) {
+    const cells = hasPost.flatMap(d => SAT_SHORT.map((k, i) => ({ d, k, v: d.satMeans[i] }))).filter(x => x.v != null);
+    const best = topBy(cells, x => x.v), worst = lowBy(cells, x => x.v);
+    const strengths = hasPost.map(d => { const i = d.satMeans.indexOf(Math.max(...d.satMeans.filter(v => v != null))); return `${d.c.short}強在${q(SAT_SHORT[i])}`; });
+    const rd = D.filter(d => d.readyD != null);
+    iHeat = `${strengths.join('、')}。所有課程中分數最高的是${q(best.d.c.short)}的${q(best.k)}（${f1(best.v)}），相對最弱的是${q(worst.d.c.short)}的${q(worst.k)}（${f1(worst.v)}），可優先檢視。` +
+      (rd.length ? `臨床準備度提升最多的是${q(topBy(rd, d => d.readyD).c.short)}（${fd(topBy(rd, d => d.readyD).readyD)}）。` : '');
+  }
+  let iPr = '尚無後測資料。';
+  if (hasPost.length) {
+    const pl = hasPost.filter(d => d.practiceLow != null), mx = pl.length ? topBy(pl, d => d.practiceLow) : null;
+    const rc = hasPost.filter(d => d.recommend != null), mn = rc.length ? lowBy(rc, d => d.recommend) : null;
+    iPr = (mx && mx.practiceLow > 0 ? `${q(mx.c.short)}有 ${Math.round(mx.practiceLow * 100)}% 學員覺得實作時間太少，為各課程最高${mx.practiceLow >= .3 ? '，建議增加練習時間或調整每場人數' : ''}。` : '各課程學員都沒有反映實作時間太少。') +
+      (mn ? (mn.recommend >= .9 ? '各課程的推薦同意率都在九成以上，學員願意推薦給其他人。' : `推薦同意率最低的是${q(mn.c.short)}（${Math.round(mn.recommend * 100)}%）。`) : '');
+  }
   setTimeout(() => document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go)));
-  return `<div class="grid">${kpis}${cards}<div class="grid g2">${dumb}${satCmp}</div>${heat}${pr}</div>`;
+  return `<div class="grid">${kpis}${cards}<div class="grid g2">${addI(dumb, iDumb)}${addI(satCmp, iSat)}</div>${addI(heat, iHeat)}${addI(pr, iPr)}</div>`;
 }
 
 // ---------- course page ----------
@@ -446,11 +548,62 @@ function viewCourse(c) {
   const fbList = (key) => { const items = d.post.filter(r => String(r[key] || '').trim()); return items.length ? `<div class="fb">${items.map(r => `<div class="fb-item">${esc(r[key])}<small>${esc(r['身分'] || '')}｜${dayKey(r._d)}</small></div>`).join('')}</div>` : '<p class="empty">尚無回饋</p>'; };
   const fb = `<div class="grid g2">${card('最有幫助的內容', '後測簡答，依身分與日期顯示，不列姓名', fbList('最有幫助的內容'))}${card('回饋與建議', '學員想開的課程與想說的話', fbList('回饋與建議'))}</div>`;
 
-  return `<div class="grid">${kpis}${skillChart}<div class="grid g2">${satCard}${readyCard}</div><div class="grid g2">${bg}${expect}</div>${career}${track}${fb}</div>`;
+  // ---- 分析註解 ----
+  const sk = d.skills.filter(x => x.d != null);
+  let iSkill = '尚無前後測都完成的學員，無法計算同一人的提升幅度。';
+  if (sk.length) {
+    const hi = topBy(sk, x => x.d), lo = lowBy(sk, x => x.d);
+    const postLow = lowBy(d.skills.filter(x => x.post != null), x => x.post);
+    const sig = d.skills.filter(x => x.w.p != null && x.w.p < .05).length;
+    iSkill = `提升最多的是${q(hi.s)}（${fd(hi.d)} 分），提升最少的是${q(lo.s)}（${fd(lo.d)} 分）。` +
+      (postLow ? `課後信心仍最低的是${q(postLow.s)}（${f1(postLow.post)} 分），可作為下次課程加強的重點。` : '') +
+      (sig ? `共有 ${sig} 項技能的進步達統計顯著（p < .05）。` : (d.pairs.length < 6 ? '目前人數還少，累積更多場次後檢定結果會更穩定。' : ''));
+  }
+  let iSat2 = '尚無後測資料。';
+  if (d.post.length) {
+    const ms = d.satMeans.map((v, i) => ({ v, k: SAT_SHORT[i] })).filter(x => x.v != null);
+    const hi = topBy(ms, x => x.v), lo = lowBy(ms, x => x.v);
+    iSat2 = `評價最高的是${q(hi.k)}（${f1(hi.v)} 分）` + (hi.k !== lo.k ? `，相對較低的是${q(lo.k)}（${f1(lo.v)} 分）` : '') +
+      `。整體滿意度 ${f1(d.overall)} 分，${d.recommend == null ? '' : `${Math.round(d.recommend * 100)}% 的學員會推薦其他人來上`}${d.overall >= 4.5 ? '，學員非常喜歡這堂課。' : d.overall >= 4 ? '，整體評價良好。' : '，建議參考下方回饋調整課程。'}`;
+  }
+  const rp = d.post.map(r => num(r['臨床準備度'])).filter(x => x != null);
+  let iReady = d.readyPre != null && d.readyPost != null
+    ? `臨床準備度平均從 ${f1(d.readyPre)} 分提升到 ${f1(d.readyPost)} 分，` + (rp.filter(x => x >= 4).length ? `課後有 ${pct(rp.filter(x => x >= 4).length, rp.length)} 的學員覺得自己準備好了（4–5 分）。` : '但課後還沒有學員給到 4 分以上，實際上手前可能需要更多練習機會。') : '前測或後測資料不足，暫時無法比較臨床準備度。';
+  if (d.practiceLow != null) iReady += d.practiceLow > 0 ? `另有 ${Math.round(d.practiceLow * 100)}% 學員覺得實作時間太少${d.practiceLow >= .3 ? '，建議增加每人的操作時間' : ''}。` : '沒有學員覺得實作時間太少。';
+  let iBg = '尚無前測資料。';
+  if (d.pre.length) {
+    const ids = count(d.pre.map(r => r['身分']), IDS).sort((a, b) => b[1] - a[1]);
+    const never = d.pre.filter(r => r['操作次數'] === '從未使用過').length;
+    const took = d.pre.filter(r => r['曾參加相關課程'] === '是').length;
+    iBg = `學員以 ${ids[0][0]} 為主（${ids[0][1]} 人，${pct(ids[0][1], d.pre.length)}）。${pct(never, d.pre.length)} 的學員上課前從未操作過${never / d.pre.length >= .5 ? '，多數是從零開始' : ''}；${pct(took, d.pre.length)} 曾上過相關課程。`;
+  }
+  let iExp = '尚無前測資料。';
+  if (d.pre.length) {
+    const t = countMulti(d.pre.map(r => r['最希望學到'])), w = count(d.pre.map(r => r['最擔心']));
+    iExp = (t.length ? `學員最想學的是${q(t[0][0])}（${t[0][1]} 人）` + (t[1] ? `，其次是${q(t[1][0])}` : '') + '。' : '') +
+      (w.length ? `最常見的擔心是${q(w[0][0])}（${w[0][1]} 人），可提供給講師在課程中優先回應。` : '');
+  }
+  let iCar = '';
+  if (c.career && d.pre.length) {
+    const will = d.pre.filter(r => (num(r['外科意願']) || 0) >= 4).length;
+    const upN = d.post.filter(r => /提高/.test(r['對外科意願的影響'] || '')).length;
+    iCar = `課前有 ${pct(will, d.pre.length)} 的學員可能或幾乎確定走外科系。` + (d.post.length ? `課後 ${pct(upN, d.post.length)} 表示這堂課提高了走外科的意願${upN / d.post.length >= .5 ? '，課程對外科招募有正面幫助' : ''}。` : '');
+  }
+  const pD = people.map(p => p.pre && p.post ? d.confMean(p.post) - d.confMean(p.pre) : null).filter(x => x != null);
+  const missNames = people.filter(p => !p.pre || !p.post).map(p => p.name);
+  let iTrack = `前後測都完成的有 ${d.pairs.length} 人。` + (missNames.length ? `尚未完成的有 ${missNames.length} 人：${missNames.slice(0, 6).map(esc).join('、')}${missNames.length > 6 ? ' 等' : ''}，可提醒補填。` : '所有學員都已完成。') +
+    (pD.length ? `個人信心提升範圍為 ${fd(Math.min(...pD))} 到 ${fd(Math.max(...pD))} 分${pD.some(x => x <= 0) ? '，有學員課後沒有進步，可個別關心' : ''}。` : '');
+  const nHelp = d.post.filter(r => String(r['最有幫助的內容'] || '').trim()).length, nFb = d.post.filter(r => String(r['回饋與建議'] || '').trim()).length;
+  const fbCards = `<div class="grid g2">${addI(card('最有幫助的內容', '後測簡答，依身分與日期顯示，不列姓名', fbList('最有幫助的內容')), nHelp ? `共收到 ${nHelp} 則回饋，可從中找出學員最有感的教學方式，作為課程的固定亮點。` : '')}${addI(card('回饋與建議', '學員想開的課程與想說的話', fbList('回饋與建議')), nFb ? `共 ${nFb} 位學員留言（${pct(nFb, d.post.length)}），其中提到的新課程需求可作為中心下一步開課的參考。` : '')}</div>`;
+  return `<div class="grid">${kpis}${addI(skillChart, iSkill)}<div class="grid g2">${addI(satCard, iSat2)}${addI(readyCard, iReady)}</div><div class="grid g2">${addI(bg, iBg)}${addI(expect, iExp)}</div>${addI(career, iCar)}${addI(track, iTrack)}${fbCards}</div>`;
 }
 
 // ---------- components ----------
 function kpi(label, val, sub, cls = '') { return `<div class="kpi"><span>${label}</span><b class="${cls}">${val}</b>${sub ? `<em>${sub}</em>` : ''}</div>`; }
+function addI(html, text) { return text ? html.replace(/<\/section>$/, `<div class="insight"><b>分析</b><p>${text}</p></div></section>`) : html; }
+const topBy = (arr, f) => arr.reduce((a, b) => (f(b) > f(a) ? b : a));
+const lowBy = (arr, f) => arr.reduce((a, b) => (f(b) < f(a) ? b : a));
+const q = s => `「${s}」`;
 function card(title, sub, body) { return `<section class="card"><h2>${title}</h2>${sub ? `<p class="sub">${sub}</p>` : ''}${body}</section>`; }
 function count(arr, order) {
   const m = new Map(); (order || []).forEach(o => m.set(o, 0));
@@ -591,7 +744,13 @@ function demoWorry(id, rnd) {
 
 // ---------- boot ----------
 (() => { const h = (location.hash || '').slice(1); if (h && (h === 'overview' || COURSES.some(c => c.id === h))) state.tab = h; })();
-load();
+$('#loginForm').addEventListener('submit', login);
+$('#logout').onclick = () => logout();
+if (!GAS_URL) $('#demoHint').hidden = false;
+(async () => {
+  const saved = ss.get('sim_dash_pw');
+  if (saved) { $('#pw').value = saved; await login(); } else { $('#pw').focus(); }
+})();
 </script>
 
 </body>
