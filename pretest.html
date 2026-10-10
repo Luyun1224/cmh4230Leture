@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>模擬課程課前問卷</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap">
+<style>
+/* Layout: 海報式漫畫風——放射光芒底色上，一張張粗黑框「貼紙卡」由上而下疊放；選課卡 → 題組卡 → 送出 */
+:root{
+  --ground:#F2661B;--ground-deep:#E3550D;--paper:#FFF7EC;--soft:#FFE6CF;--accent:#F2661B;--accent-text:#B8430A;--muted:#6E5A4C;
+  --ink:#1B1410;
+  --white:#FFFFFF;
+  --pop:#FFD84D;
+  --danger:#C62828;
+  --f-display:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  --f-body:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  --r:18px;
+  --shadow:5px 5px 0 var(--ink);
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{background:var(--ground)}
+body{
+  margin:0;font-family:var(--f-body);color:var(--ink);font-size:16px;line-height:1.6;
+  background:
+    radial-gradient(circle at 50% -10%, rgba(255,255,255,.22), transparent 55%),
+    repeating-conic-gradient(from 0deg at 50% -8%, var(--ground) 0deg 6deg, var(--ground-deep) 6deg 12deg);
+  background-color:var(--ground);
+  min-height:100vh;
+  padding-inline:16px;padding-block:20px 56px;
+}
+.wrap{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+
+/* ---------- Hero ---------- */
+.hero{position:relative;text-align:center;padding-block:8px 4px}
+.bubble{
+  display:inline-block;background:var(--white);border:3px solid var(--ink);border-radius:14px;
+  padding:6px 14px;font-weight:900;font-size:15px;box-shadow:3px 3px 0 var(--ink);transform:rotate(-3deg);
+  position:relative;margin-bottom:10px
+}
+.bubble::after{content:"";position:absolute;left:28px;bottom:-12px;width:16px;height:16px;background:var(--white);
+  border-right:3px solid var(--ink);border-bottom:3px solid var(--ink);transform:rotate(45deg) skew(10deg,10deg)}
+.h-title{margin:0;font-family:var(--f-display);font-weight:900;line-height:1.08;letter-spacing:.02em;text-wrap:balance}
+.h-title .l1,.h-title .l2{display:block;-webkit-text-stroke:7px var(--ink);paint-order:stroke fill;text-shadow:5px 6px 0 var(--ink)}
+.h-title .l1{color:var(--white);font-size:clamp(34px,8vw,58px)}
+.h-title .l2{color:var(--pop);font-size:clamp(40px,10vw,72px)}
+.en{display:inline-block;margin-top:14px;background:var(--white);border:3px solid var(--ink);border-radius:999px;
+  padding:4px 16px;font-weight:700;font-size:13px;letter-spacing:.06em;box-shadow:3px 3px 0 var(--ink)}
+.burst{
+  position:absolute;right:-6px;top:-4px;width:96px;height:96px;display:grid;place-items:center;text-align:center;
+  font-weight:900;line-height:1.1;font-size:14px;color:var(--ink);transform:rotate(10deg);
+}
+.burst::before{content:"";position:absolute;inset:0;background:var(--pop);border:3px solid var(--ink);
+  clip-path:polygon(50% 0,61% 18%,82% 8%,80% 30%,100% 36%,86% 52%,100% 68%,79% 72%,82% 93%,61% 83%,50% 100%,39% 83%,18% 93%,21% 72%,0 68%,14% 52%,0 36%,20% 30%,18% 8%,39% 18%)}
+.burst span{position:relative}
+.burst b{display:block;font-size:24px}
+@media (max-width:560px){.burst{width:76px;height:76px;font-size:11px;right:-8px;top:-14px}.burst b{font-size:18px}}
+
+/* ---------- Cards ---------- */
+.card{background:var(--paper);border:3px solid var(--ink);border-radius:var(--r);box-shadow:var(--shadow);padding:22px 20px 20px;position:relative}
+.tab{
+  position:absolute;top:-18px;left:16px;display:flex;align-items:center;gap:8px;
+  background:var(--ink);color:var(--white);border-radius:10px;padding:4px 14px 5px;font-weight:900;font-size:17px;letter-spacing:.04em
+}
+.tab .no{background:var(--accent);color:var(--white);border-radius:6px;padding:0 7px;font-size:14px;border:2px solid var(--white)}
+.intro{font-size:14px;color:var(--muted);margin:6px 0 0}
+
+/* course picker */
+.courses{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:14px}
+@media (max-width:560px){.courses{grid-template-columns:1fr}}
+.course{
+  all:unset;min-height:64px;justify-content:center;padding-right:84px!important;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;gap:6px;
+  background:var(--white);border:3px solid var(--ink);border-radius:14px;padding:12px 14px 12px;position:relative;
+  transition:transform .12s ease, box-shadow .12s ease, background .12s ease;box-shadow:3px 3px 0 var(--ink)
+}
+.course:hover{transform:translate(-1px,-1px);box-shadow:5px 5px 0 var(--ink)}
+.course:focus-visible{outline:3px solid var(--pop);outline-offset:3px}
+.course[aria-pressed="true"]{background:var(--pop);transform:translate(-2px,-2px);box-shadow:6px 6px 0 var(--ink)}
+.c-top{display:flex;align-items:center;gap:10px}
+.c-no{font-family:var(--f-display);font-weight:900;font-size:22px;color:var(--white);background:var(--accent);
+  border:3px solid var(--ink);border-radius:9px;padding:0 8px;line-height:1.35;flex:none}
+.c-name{font-weight:900;font-size:18px;line-height:1.3;min-width:0}
+.c-meta{font-size:13px;color:var(--muted);line-height:1.5;display:grid;gap:1px}
+.c-meta b{color:var(--ink);font-weight:700}
+.c-target{position:absolute;right:10px;top:-12px;background:var(--ink);color:var(--pop);font-weight:900;font-size:12px;
+  border-radius:999px;padding:1px 10px;letter-spacing:.05em}
+.c-check{position:absolute;right:12px;top:50%;margin-top:-10px;font-weight:900;font-size:13px;opacity:0}
+.course[aria-pressed="true"] .c-check{opacity:1}
+
+/* ---------- Questions ---------- */
+.qs{display:flex;flex-direction:column;gap:22px;margin-top:10px}
+.q{display:flex;flex-direction:column;gap:10px;scroll-margin-top:70px}
+.q-label{font-weight:700;font-size:16.5px;line-height:1.5;display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap}
+.q-num{flex:none;display:inline-grid;place-items:center;min-width:28px;height:28px;border-radius:50%;
+  background:var(--ink);color:var(--white);font-weight:900;font-size:14px;margin-top:-1px}
+.q-text{flex:1 1 200px;min-width:0}
+.q-tag{flex:none;font-size:12px;font-weight:700;color:var(--accent-text);background:var(--soft);border:2px solid var(--accent);
+  border-radius:999px;padding:0 9px;line-height:1.7}
+.q-hint{font-size:13px;color:var(--muted);margin:-4px 0 0 36px}
+.q.missing .q-label .q-text{color:var(--danger)}
+.q .err{display:none;color:var(--danger);font-size:13px;font-weight:700;margin-left:36px}
+.q.missing .err{display:block}
+
+.chips{display:flex;flex-wrap:wrap;gap:8px;padding-left:36px}
+@media (max-width:480px){.chips,.q-hint,.q .err,.likert,.textin{padding-left:0;margin-left:0}}
+.chip{position:relative}
+.chip input{position:absolute;opacity:0;pointer-events:none}
+.chip span{
+  display:inline-block;cursor:pointer;background:var(--white);border:2.5px solid var(--ink);border-radius:999px;
+  padding:6px 14px;font-size:15px;font-weight:500;line-height:1.4;transition:background .1s, transform .1s
+}
+.chip span:hover{background:var(--soft)}
+.chip input:focus-visible + span{outline:3px solid var(--accent);outline-offset:2px}
+.chip input:checked + span{background:var(--accent);color:var(--white);font-weight:700;box-shadow:2px 2px 0 var(--ink);transform:translate(-1px,-1px)}
+.chip input:disabled + span{opacity:.4;cursor:not-allowed}
+.other-in{margin-left:36px;margin-top:-2px}
+@media (max-width:480px){.other-in{margin-left:0}}
+
+.textin,.other-in{display:block}
+input[type=text],textarea{
+  width:100%;font:inherit;font-size:16px;color:var(--ink);background:var(--white);border:2.5px solid var(--ink);border-radius:12px;padding:10px 12px;
+}
+textarea{min-height:96px;resize:vertical}
+input[type=text]:focus,textarea:focus{outline:none;box-shadow:0 0 0 3px var(--pop),3px 3px 0 var(--ink)}
+.textin{padding-left:36px}
+
+/* likert matrix */
+.likert{padding-left:36px;display:flex;flex-direction:column;gap:10px}
+.scale-key{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);font-weight:700;padding:0 2px}
+.lk-row{background:var(--white);border:2.5px solid var(--ink);border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.lk-row.missing{border-color:var(--danger);box-shadow:0 0 0 2px var(--danger)}
+.lk-item{font-weight:600;font-size:15px;line-height:1.45}
+.lk-item i{font-style:normal;color:var(--accent-text);font-weight:900;margin-right:4px}
+.lk-btns{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.lk-btns label{position:relative}
+.lk-btns input{position:absolute;opacity:0;pointer-events:none}
+.lk-btns span{display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;
+  border:2px solid var(--ink);border-radius:10px;padding:5px 2px;background:var(--paper);line-height:1.15;text-align:center;min-height:48px}
+.lk-btns span b{font-size:17px;font-weight:900}
+.lk-btns span small{font-size:11px;color:var(--muted)}
+.lk-btns input:checked + span{background:var(--accent);color:var(--white)}
+.lk-btns input:checked + span small{color:var(--white)}
+.lk-btns input:focus-visible + span{outline:3px solid var(--pop);outline-offset:1px}
+@media (max-width:520px){.lk-btns span small{display:none}.lk-btns span{min-height:40px}}
+
+/* ---------- progress + submit ---------- */
+.progress{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--ink);color:var(--white);border-radius:999px;
+  padding:6px 8px 6px 16px;display:flex;align-items:center;gap:12px;font-weight:700;font-size:14px;box-shadow:3px 3px 0 rgba(0,0,0,.25)}
+.bar{flex:1;height:12px;background:rgba(255,255,255,.18);border-radius:999px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--pop);border-radius:999px;transition:width .25s ease}
+.progress .pct{font-variant-numeric:tabular-nums;min-width:62px;text-align:right;padding-right:8px}
+
+.submit-zone{display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center}
+.btn{
+  all:unset;box-sizing:border-box;cursor:pointer;font-family:var(--f-display);font-weight:900;font-size:24px;letter-spacing:.06em;
+  background:var(--pop);color:var(--ink);border:3px solid var(--ink);border-radius:16px;padding:12px 34px;box-shadow:5px 5px 0 var(--ink);
+  transition:transform .1s, box-shadow .1s
+}
+.btn:hover{transform:translate(-1px,-1px);box-shadow:6px 6px 0 var(--ink)}
+.btn:active{transform:translate(3px,3px);box-shadow:2px 2px 0 var(--ink)}
+.btn:focus-visible{outline:3px solid var(--white);outline-offset:3px}
+.btn[disabled]{opacity:.6;cursor:wait}
+.btn .arr{color:var(--accent-text);margin-left:6px}
+.submit-note{color:var(--white);font-size:13px;font-weight:500;text-shadow:0 1px 0 rgba(0,0,0,.3)}
+.formerr{color:var(--white);background:var(--danger);border:3px solid var(--ink);border-radius:12px;padding:6px 14px;font-weight:700;font-size:14px}
+
+/* ---------- done ---------- */
+.done{text-align:center;padding:34px 20px 28px}
+.done .big{font-family:var(--f-display);font-weight:900;font-size:clamp(34px,8vw,52px);line-height:1.1;margin:6px 0 10px;
+  color:var(--pop);-webkit-text-stroke:6px var(--ink);paint-order:stroke fill;text-shadow:4px 5px 0 var(--ink)}
+.done p{margin:6px auto;max-width:34em}
+.done .tagline{font-weight:900;font-size:18px}
+.demo-flag{display:inline-block;margin-top:12px;font-size:12px;color:var(--muted);border:2px dashed var(--muted);border-radius:8px;padding:2px 10px}
+
+.foot{text-align:center;color:var(--white);font-size:12.5px;opacity:.9;text-shadow:0 1px 0 rgba(0,0,0,.3)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+</head>
+<body>
+<div class="wrap" id="app">
+  <header class="hero">
+    <div class="bubble">課前暖身一下！</div>
+    <h1 class="h-title"><span class="l1">臨床技能中心</span><span class="l2">模擬課程前測</span></h1>
+    <div class="en">Simulation Course · Pre-Course Survey</div>
+    <div class="burst" aria-hidden="true"><span>約<b>3</b>分鐘</span></div>
+  </header>
+
+  <section class="card" aria-labelledby="pick-h">
+    <div class="tab" id="pick-h"><span class="no">STEP 1</span>選擇今天的課程</div>
+    <p class="intro">點選你今天要上的課程，就會出現這堂課的前測題目。請在課程開始前完成。</p>
+    <div class="courses" id="courses"></div>
+  </section>
+
+  <div class="progress" id="progress" hidden><span>填答進度</span><div class="bar"><i id="barfill"></i></div><span class="pct" id="pct">0 / 0</span></div>
+
+  <form id="form" novalidate hidden>
+    <div class="wrap" id="sections" style="gap:30px"></div>
+    <div class="submit-zone" style="margin-top:28px">
+      <div class="formerr" id="formerr" hidden></div>
+      <button class="btn" type="submit" id="submitBtn">送出問卷<span class="arr">›››</span></button>
+      <div class="submit-note">本問卷採記名填寫，結果僅供課程改善及教學成效評估使用，不影響任何考核成績。</div>
+    </div>
+  </form>
+
+  <section class="card done" id="done" hidden>
+    <div class="tab"><span class="no">✓</span>已送出</div>
+    <div class="big" id="doneBig"></div>
+    <p class="tagline" id="doneLine"></p>
+    <p id="doneSub"></p>
+    <span class="demo-flag" id="demoFlag" hidden>示範模式：尚未連接 Google Sheet，資料未上傳</span>
+  </section>
+
+  <div class="foot">奇美醫院教學部臨床技能中心</div>
+</div>
+
+<script>
+// ===== 設定：部署 Google Apps Script 後，把網址貼在這裡 =====
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwQkTfzyyIxux8yMf93oNTXn5YeXMQ2BUCgBypVnjHsgmf7LtLoTzrqWwEJB1pZ7_EC/exec';
+
+const PHASE = 'pre';               // 'pre' | 'post'
+const PHASE_LABEL = PHASE === 'pre' ? '前測' : '後測';
+const DATA = {"identity":["UGY","PGY1","PGY2","住院醫師"],"conf":["1 完全沒信心","2 不太有信心","3 普通","4 有信心","5 非常有信心"],"agree":["1 非常不同意","2 不同意","3 普通","4 同意","5 非常同意"],"ready":["1 完全沒準備好","2","3","4","5 完全準備好"],"satisfaction":["課程內容符合我的學習需求與上課前的期待","講師的示範與回饋清楚、具體且有幫助","模擬器／教具有助於我練習與學習","課程所學對我未來的臨床工作有幫助","我會推薦其他學員參加此課程"],"experience":["從未使用過","1–3 次","4–10 次","超過 10 次"],"closing":"今天辛苦啦，謝謝你的熱情參與！未來還想在中心解鎖哪些新技能？有任何心得、建議，或想對講師說的話，都歡迎寫下來，讓我們一起把課程變得更好！","courses":[{"id":"echo","name":"心臟超音波課程","short":"心臟超音波","target":"PGY2","date":"10/14（三）13:00–14:30","teacher":"曾宣靈醫師","place":"模擬兒科","expWhat":"心臟超音波（含模擬器）","priorCourse":"心臟超音波","topics":["探頭選擇與機器設定","標準切面取得（PLAX、PSAX、A4C、Subcostal）","左心室收縮功能目視評估","心包膜積液辨識","右心室大小評估","下腔靜脈（IVC）評估","休克病人床邊評估流程","實際影像判讀案例"],"worries":["探頭方向與手部操作不順","找不到切面或影像品質不佳","解剖構造辨識困難","不知道影像如何與臨床判斷連結","擔心判讀錯誤影響病人處置","沒有特別擔心"],"skills":["選擇探頭並設定心臟超音波模式與參數","取得標準切面（PLAX、PSAX、A4C、Subcostal）","目視評估左心室收縮功能","辨識心包膜積液","判斷右心室是否擴大","評估下腔靜脈（IVC）大小與呼吸變化"],"readiness":"如果明天在急診或病房，需要為病人執行床邊心臟超音波做初步評估，您覺得自己準備好了嗎？","career":false},{"id":"endo","name":"內視鏡模擬課程","short":"內視鏡","target":"PGY2","date":"10/20（二）11:00–12:00","teacher":"郭加智醫師","place":"模擬急診室","expWhat":"胃鏡（含模擬器）","priorCourse":"胃鏡／內視鏡","topics":["內視鏡設備與構造認識","握鏡姿勢與旋鈕操控","插入食道與通過幽門","胃內反轉（retroflexion）","系統化觀察與標準位置拍攝","常見病灶辨識","組織切片操作","檢查前準備與病人安全"],"worries":["鏡頭方向控制不順","無法維持清楚視野","插入食道或通過幽門困難","不熟悉系統化觀察順序","病灶辨識困難","擔心造成病人不適或併發症","沒有特別擔心"],"skills":["檢查前準備與病人安全評估（禁食、抗凝血藥物、鎮靜風險）","正確握持內視鏡並以旋鈕控制鏡頭方向","插入食道並通過幽門進入十二指腸","執行胃內反轉（retroflexion）觀察賁門與胃底","依系統化順序完整觀察並拍攝標準位置影像","辨識常見病灶（如潰瘍、出血點、腫瘤）","執行組織切片"],"readiness":"如果在上級醫師指導下，由您操作一次完整的胃鏡觀察，您覺得自己準備好了嗎？","career":false},{"id":"abd","name":"腹部超音波課程","short":"腹部超音波","target":"PGY2","date":"10/20（二）15:30–16:30","teacher":"張瑄元醫師","place":"模擬急診室","expWhat":"腹部超音波（含模擬器）","priorCourse":"腹部超音波","topics":["探頭選擇與機器設定","右上腹（肝腎介面）切面","左上腹（脾腎介面）切面","骨盆腔（膀胱周圍）切面","腹腔游離液體判讀（FAST）","膽囊與膽結石評估","腹主動脈評估","實際影像判讀案例"],"worries":["探頭方向與手部操作不順","找不到切面或影像被腸氣／肋骨遮蔽","解剖構造辨識困難","不確定是否為游離液體","擔心判讀錯誤影響病人處置","沒有特別擔心"],"skills":["依切面需求選擇探頭並設定機器參數","取得右上腹肝腎介面（Morison’s pouch）影像","取得左上腹脾腎介面影像","取得骨盆腔（膀胱周圍）影像","判斷腹腔內是否有游離液體","辨識膽囊並評估有無膽結石","測量腹主動脈直徑"],"readiness":"如果明天在急診，需要為腹部外傷或腹痛病人執行床邊腹部超音波（含 FAST）做初步評估，您覺得自己準備好了嗎？","career":false},{"id":"lap","name":"腹腔鏡課程","short":"腹腔鏡","target":"PGY1","date":"待公告","teacher":"待公告","place":"臨床技能中心","expWhat":"腹腔鏡（含模擬器、箱型訓練器、擔任扶鏡手）","priorCourse":"腹腔鏡或微創手術","topics":["腹腔鏡設備與器械認識","氣腹建立與 trocar 置放原則","扶鏡技巧（含 30 度鏡）","基本手眼協調（peg transfer、剪裁）","腔內縫合與打結","能量器械安全使用","擔任扶鏡手／第一助手的角色與禁忌","實際手術影片解析","了解外科系的工作與職涯"],"worries":["手眼協調、器械方向相反（fulcrum effect）","在 2D 畫面判斷深度","扶鏡扶不好、跟不上主刀","在手術室怕犯錯、怕被罵","不熟悉器械與設備","沒有特別擔心"],"skills":["氣腹建立與 trocar 置放原則","扶鏡並維持穩定、置中視野（含 30 度鏡）","克服支點效應，器械方向正確","在 2D 螢幕判斷深度與距離","雙手協調操作（含非慣用手）","以抓鉗轉移物件（peg transfer）","腔內縫合與打結","安全使用電燒等能量器械"],"readiness":"如果下週要在手術室擔任扶鏡手，您覺得自己準備好了嗎？","career":true}]};
+
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+};
+
+let current = null;   // selected course
+let questions = [];   // flattened question defs for current course
+
+// ---------- course picker ----------
+function renderCourses() {
+  $('#courses').innerHTML = DATA.courses.map((c, i) => `
+    <button type="button" class="course" data-id="${c.id}" aria-pressed="false">
+      <span class="c-top"><span class="c-no">${String(i + 1).padStart(2, '0')}</span><span class="c-name">${esc(c.name)}</span></span>
+      <span class="c-check">✓ 已選擇</span>
+    </button>`).join('');
+  document.querySelectorAll('.course').forEach(b => b.addEventListener('click', () => pick(b.dataset.id, true)));
+}
+
+function pick(id, scroll) {
+  const c = DATA.courses.find(x => x.id === id);
+  if (!c) return;
+  current = c;
+  document.querySelectorAll('.course').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.id === id)));
+  buildForm(c);
+  $('#form').hidden = false; $('#progress').hidden = false; $('#done').hidden = true;
+  if (scroll) setTimeout(() => $('#sections').scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+}
+
+// ---------- question definitions ----------
+function defs(c) {
+  const D = DATA, S = [];
+  const sec = (title, qs) => S.push({ title, qs: qs.filter(Boolean) });
+  const lap = c.career;
+  if (PHASE === 'pre') {
+    sec('基本資料', [
+      { k: '姓名', t: 'text', label: '姓名', req: true, ph: '請填寫您的姓名', remember: 'sim_name', hint: '姓名僅用於確認誰已完成填答；您的作答內容只會以整體統計呈現，不會個別公開，也不影響任何考核，請放心如實填寫！' },
+      { k: '身分', t: 'radio', label: '您目前的身分', opts: D.identity, req: true, remember: 'sim_id' },
+      { k: '操作次數', t: 'radio', label: `上課前，您實際操作${c.expWhat}的次數`, opts: D.experience, req: true },
+      { k: '曾參加相關課程', t: 'radio', label: `您是否曾參加過${c.priorCourse}相關課程？`, opts: ['是', '否'], req: true,
+        follow: { when: '是', k: '曾參加課程名稱', ph: '課程名稱（選填）' } },
+    ]);
+    if (lap) sec('未來職涯', [
+      { k: '專科方向', t: 'radio', label: '目前最可能選擇的專科方向', opts: ['外科系（一般外科、泌尿、婦產、大腸直腸、胸腔等需手術之科）', '非外科系（內科、家醫、急診、影像等）', '還沒決定'], req: true },
+      { k: '外科意願', t: 'radio', label: '未來走外科系的意願', opts: ['1 完全不考慮', '2 不太可能', '3 不確定', '4 可能會', '5 幾乎確定'], req: true },
+    ]);
+    sec('課程期待', [
+      { k: '最希望學到', t: 'check', label: '最希望在這堂課學到的內容', opts: c.topics, max: 3, other: true, req: true, tag: '最多選 3 項' },
+      lap && { k: '技能重要性', t: 'radio', label: '您認為腹腔鏡基本技能對您未來臨床工作的重要性', opts: ['1 完全不重要', '2', '3', '4', '5 非常重要'], req: true },
+      lap && { k: '偏好教學方式', t: 'check', label: '偏好的教學方式', opts: ['老師示範', '箱型訓練器實作', '手術影片解說', '一對一即時回饋', '小組計時競賽'], max: 2, req: true, tag: '最多選 2 項' },
+      { k: '最擔心', t: 'radio', label: `上課前，學習${c.short}最擔心的部分`, opts: c.worries, other: true, req: true },
+    ]);
+    sec('技能信心自評', [
+      { k: '信心', t: 'likert', label: '您目前對以下技能的信心程度', items: c.skills, scale: D.conf, req: true, tag: '每列選一個' },
+      { k: '臨床準備度', t: 'radio', label: c.readiness, opts: D.ready, req: true },
+    ]);
+  } else {
+    sec('基本資料', [
+      { k: '姓名', t: 'text', label: '姓名', req: true, ph: '請填寫您的姓名', remember: 'sim_name', hint: '姓名僅用於確認誰已完成填答；您的作答內容只會以整體統計呈現，不會個別公開，也不影響任何考核，請放心如實填寫！' },
+      { k: '身分', t: 'radio', label: '您目前的身分', opts: D.identity, req: true, remember: 'sim_id' },
+    ]);
+    sec('技能信心自評', [
+      { k: '信心', t: 'likert', label: '上完課後，您對以下技能的信心程度', items: c.skills, scale: D.conf, req: true, tag: '每列選一個' },
+      { k: '臨床準備度', t: 'radio', label: c.readiness, opts: D.ready, req: true },
+    ]);
+    if (lap) sec('未來職涯', [
+      { k: '對外科意願的影響', t: 'radio', label: '這堂課對您「走外科系」意願的影響', opts: ['明顯提高', '稍微提高', '沒有影響', '稍微降低', '明顯降低'], req: true },
+    ]);
+    sec('課程滿意度', [
+      { k: '滿意度', t: 'likert', label: '請依您對本次課程的感受作答', items: D.satisfaction, scale: D.agree, req: true, tag: '每列選一個' },
+      { k: '整體滿意度', t: 'radio', label: '整體而言，您對本次課程的滿意度', opts: ['1 非常不滿意', '2 不滿意', '3 普通', '4 滿意', '5 非常滿意'], req: true },
+      { k: '實作練習時間', t: 'radio', label: '實作練習時間', opts: ['太少', '剛好', '太多'], req: true },
+      { k: '最有幫助的內容', t: 'area', label: '這堂課對您最有幫助的內容是什麼？', req: true, ph: '寫下讓你印象最深、最實用的一個收穫' },
+    ]);
+    sec('回饋與建議', [
+      { k: '回饋與建議', t: 'area', label: DATA.closing, req: false, ph: '想學的新課程、心得、對講師的悄悄話，都歡迎！' },
+    ]);
+  }
+  return S;
+}
+
+// ---------- render ----------
+function buildForm(c) {
+  const S = defs(c);
+  questions = [];
+  let n = 0;
+  $('#sections').innerHTML = S.map((s, si) => `
+    <section class="card">
+      <div class="tab"><span class="no">${si === 0 ? esc(c.short) : 'PART ' + (si + 1)}</span>${esc(s.title)}</div>
+      ${si === 0 ? `<p class="intro">${esc(c.name)}｜${PHASE === 'pre' ? '請於課程開始前填寫' : '請於課程結束後填寫'}</p>` : ''}
+      <div class="qs">${s.qs.map(q => { n++; q.n = n; questions.push(q); return renderQ(q); }).join('')}</div>
+    </section>`).join('');
+  // restore remembered name / identity
+  questions.filter(q => q.remember).forEach(q => {
+    const v = store.get(q.remember); if (!v) return;
+    const el = $(`#q-${q.n}`);
+    if (q.t === 'text') $('input', el).value = v;
+    else { const r = [...el.querySelectorAll('input')].find(i => i.value === v); if (r) r.checked = true; }
+  });
+  $('#sections').querySelectorAll('input,textarea').forEach(i => {
+    i.addEventListener('input', onChange); i.addEventListener('change', onChange);
+  });
+  updateProgress();
+}
+
+function tagFor(q) {
+  if (q.tag) return q.tag;
+  if (!q.req) return '選填';
+  return { radio: '單選', text: '必填', area: '簡答', check: '複選' }[q.t] || '';
+}
+
+function renderQ(q) {
+  const id = `q-${q.n}`;
+  const name = `f${q.n}`;
+  let body = '';
+  if (q.t === 'text') body = `<div class="textin"><input type="text" id="${id}-in" name="${name}" placeholder="${esc(q.ph || '')}" autocomplete="name"></div>`;
+  if (q.t === 'area') body = `<div class="textin"><textarea id="${id}-in" name="${name}" placeholder="${esc(q.ph || '')}"></textarea></div>`;
+  if (q.t === 'radio' || q.t === 'check') {
+    const type = q.t === 'radio' ? 'radio' : 'checkbox';
+    const opts = [...q.opts, ...(q.other ? ['其他'] : [])];
+    body = `<div class="chips" role="${type === 'radio' ? 'radiogroup' : 'group'}" aria-labelledby="${id}-l">${opts.map((o, i) =>
+      `<label class="chip"><input type="${type}" id="${id}-o${i}" name="${name}" value="${esc(o)}"><span>${esc(o)}</span></label>`).join('')}</div>`;
+    if (q.other) body += `<div class="other-in" id="${id}-other" hidden><input type="text" id="${id}-oth" placeholder="請說明「其他」" aria-label="其他說明"></div>`;
+    if (q.follow) body += `<div class="other-in" id="${id}-follow" hidden><input type="text" id="${id}-fol" placeholder="${esc(q.follow.ph)}" aria-label="${esc(q.follow.ph)}"></div>`;
+  }
+  if (q.t === 'likert') {
+    body = `<div class="likert"><div class="scale-key"><span>1 ${esc(q.scale[0].replace(/^1\s*/, ''))}</span><span>5 ${esc(q.scale[4].replace(/^5\s*/, ''))}</span></div>` +
+      q.items.map((it, r) => `<div class="lk-row" id="${id}-r${r}" role="radiogroup" aria-label="${esc(it)}">
+        <div class="lk-item"><i>${String.fromCharCode(97 + r)}.</i>${esc(it)}</div>
+        <div class="lk-btns">${q.scale.map((s, v) => {
+          const lab = s.replace(/^\d\s*/, '');
+          return `<label><input type="radio" id="${id}-r${r}-${v + 1}" name="${name}-r${r}" value="${v + 1}"><span><b>${v + 1}</b><small>${esc(lab)}</small></span></label>`;
+        }).join('')}</div></div>`).join('') + `</div>`;
+  }
+  return `<div class="q" id="${id}" data-n="${q.n}">
+    <div class="q-label" id="${id}-l"><span class="q-num">${q.n}</span><span class="q-text">${esc(q.label)}</span>${tagFor(q) ? `<span class="q-tag">${esc(tagFor(q))}</span>` : ''}</div>
+    ${q.hint ? `<div class="q-hint">${esc(q.hint)}</div>` : ''}
+    ${body}
+    <div class="err">${q.t === 'likert' ? '還有項目尚未選擇喔' : '這題還沒填喔'}</div>
+  </div>`;
+}
+
+// ---------- state ----------
+function valueOf(q) {
+  const el = $(`#q-${q.n}`);
+  if (q.t === 'text' || q.t === 'area') return $(q.t === 'text' ? 'input' : 'textarea', el).value.trim();
+  if (q.t === 'radio') {
+    const r = el.querySelector('.chips input:checked'); if (!r) return '';
+    if (r.value === '其他') { const t = $(`#q-${q.n}-oth`).value.trim(); return t ? `其他：${t}` : '其他'; }
+    return r.value;
+  }
+  if (q.t === 'check') {
+    return [...el.querySelectorAll('.chips input:checked')].map(i => {
+      if (i.value === '其他') { const t = $(`#q-${q.n}-oth`).value.trim(); return t ? `其他：${t}` : '其他'; }
+      return i.value;
+    });
+  }
+  if (q.t === 'likert') return q.items.map((_, r) => { const i = el.querySelector(`input[name="f${q.n}-r${r}"]:checked`); return i ? Number(i.value) : null; });
+}
+
+function isDone(q) {
+  const v = valueOf(q);
+  if (!q.req) return true;
+  if (q.t === 'likert') return v.every(x => x != null);
+  if (q.t === 'check') return v.length > 0 && !v.includes('其他');
+  if (q.t === 'radio') return v !== '' && v !== '其他';
+  return v !== '';
+}
+
+function onChange(e) {
+  const qEl = e.target.closest('.q'); if (!qEl) return;
+  const q = questions.find(x => x.n === Number(qEl.dataset.n));
+  if (q.t === 'check' && q.max) {
+    const boxes = [...qEl.querySelectorAll('.chips input')];
+    const n = boxes.filter(b => b.checked).length;
+    boxes.forEach(b => { b.disabled = !b.checked && n >= q.max; });
+  }
+  if (q.other) {
+    const on = !!qEl.querySelector('.chips input[value="其他"]:checked');
+    $(`#q-${q.n}-other`).hidden = !on;
+  }
+  if (q.follow) {
+    const on = !!qEl.querySelector(`.chips input[value="${q.follow.when}"]:checked`);
+    $(`#q-${q.n}-follow`).hidden = !on;
+  }
+  if (qEl.classList.contains('missing') && isDone(q)) qEl.classList.remove('missing');
+  if (q.t === 'likert') qEl.querySelectorAll('.lk-row.missing').forEach((row, i) => { if (row.querySelector('input:checked')) row.classList.remove('missing'); });
+  updateProgress();
+}
+
+function updateProgress() {
+  const req = questions.filter(q => q.req);
+  const done = req.filter(isDone).length;
+  $('#barfill').style.width = req.length ? `${(done / req.length) * 100}%` : '0';
+  $('#pct').textContent = `${done} / ${req.length}`;
+}
+
+// ---------- submit ----------
+$('#form').addEventListener('submit', async e => {
+  e.preventDefault();
+  $('#formerr').hidden = true;
+  const missing = questions.filter(q => !isDone(q));
+  questions.forEach(q => $(`#q-${q.n}`).classList.toggle('missing', missing.includes(q)));
+  missing.filter(q => q.t === 'likert').forEach(q => {
+    valueOf(q).forEach((v, r) => $(`#q-${q.n}-r${r}`).classList.toggle('missing', v == null));
+  });
+  if (missing.length) {
+    $('#formerr').textContent = `還有 ${missing.length} 題沒完成（第 ${missing.map(q => q.n).join('、')} 題），補上就可以送出囉！`;
+    $('#formerr').hidden = false;
+    $(`#q-${missing[0].n}`).scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+
+  const row = { '時間戳記': new Date().toLocaleString('zh-TW', { hour12: false }), '問卷': PHASE_LABEL, '課程': current.name };
+  questions.forEach(q => {
+    const v = valueOf(q);
+    if (q.t === 'likert') q.items.forEach((it, i) => { row[`${q.k}｜${it}`] = v[i]; });
+    else if (q.t === 'check') row[q.k] = v.join('；');
+    else row[q.k] = v;
+    if (q.follow) row[q.follow.k] = v === q.follow.when ? $(`#q-${q.n}-fol`).value.trim() : '';
+    if (q.remember) store.set(q.remember, v);
+  });
+
+  const btn = $('#submitBtn');
+  btn.disabled = true; btn.firstChild.textContent = '送出中…';
+  let demo = !SCRIPT_URL;
+  try {
+    if (!demo) {
+      await fetch(SCRIPT_URL, {
+        method: 'POST', mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ sheet: `${current.short}_${PHASE_LABEL}`, row }),
+      });
+    } else {
+      console.log('[示範模式] 未設定 SCRIPT_URL，以下為將送出的資料：', row);
+    }
+    showDone(row['姓名'], demo);
+  } catch (err) {
+    $('#formerr').textContent = '送出失敗，請確認網路連線後再按一次「送出問卷」。';
+    $('#formerr').hidden = false;
+  } finally {
+    btn.disabled = false; btn.firstChild.textContent = '送出問卷';
+  }
+});
+
+function showDone(name, demo) {
+  $('#form').hidden = true; $('#progress').hidden = true;
+  $('#doneBig').textContent = PHASE === 'pre' ? '前測完成！' : '感謝填答！';
+  $('#doneLine').textContent = PHASE === 'pre'
+    ? `${name}，準備好了！一起在模擬中變強吧！`
+    : `${name}，今天辛苦啦！謝謝你的熱情參與！`;
+  $('#doneSub').textContent = PHASE === 'pre'
+    ? `已收到你的「${current.name}」課前問卷。課程結束後，記得再填一份後測問卷喔！`
+    : `已收到你的「${current.name}」後測暨滿意度問卷。你的每一句回饋，都會讓下一堂課更好。`;
+  $('#demoFlag').hidden = !demo;
+  $('#done').hidden = false;
+  $('#done').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+// ---------- boot ----------
+renderCourses();
+(() => {
+  // 支援以 ?course=echo 或 #echo 直接帶入課程（可各課程各做一個 QR Code）
+  let id = '';
+  try { id = new URLSearchParams(location.search).get('course') || ''; } catch (e) {}
+  if (!id && location.hash) id = location.hash.slice(1);
+  if (id) pick(id, false);
+})();
+</script>
+
+</body>
+</html>
