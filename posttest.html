@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap">
+<link rel="stylesheet" href="assets/survey-share.css">
 <style>
 /* Layout: 海報式漫畫風——放射光芒底色上，一張張粗黑框「貼紙卡」由上而下疊放；選課卡 → 題組卡 → 送出 */
 :root{
@@ -215,9 +216,24 @@ input[type=text]:focus,textarea:focus{outline:none;box-shadow:0 0 0 3px var(--po
     <span class="demo-flag" id="demoFlag" hidden>示範模式：尚未連接 Google Sheet，資料未上傳</span>
   </section>
 
+    <section class="card survey-share" aria-labelledby="shareTitle">
+      <h2 id="shareTitle">填答 QR Code</h2>
+      <p>手機掃描即可填答，也可以下載海報分享給學員。</p>
+      <p class="share-course" id="shareCourse"></p>
+      <canvas id="shareQR" width="360" height="360" role="img" aria-label="問卷填答 QR Code"></canvas>
+      <div class="share-actions">
+        <a class="btn share-open" id="shareOpen" target="_blank" rel="noopener">開啟填答頁</a>
+        <button class="btn" id="shareDownload" type="button">下載海報（PNG）</button>
+      </div>
+      <a class="share-url" id="shareURL" target="_blank" rel="noopener"></a>
+      <p class="share-status" id="shareStatus" role="status" aria-live="polite"></p>
+    </section>
+
   <div class="foot">奇美醫院教學部臨床技能中心</div>
 </div>
 
+<script src="assets/vendor/qrcode.js"></script>
+<script src="assets/survey-share.js"></script>
 <script>
 // ===== 設定：部署 Google Apps Script 後，把網址貼在這裡 =====
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwQkTfzyyIxux8yMf93oNTXn5YeXMQ2BUCgBypVnjHsgmf7LtLoTzrqWwEJB1pZ7_EC/exec';
@@ -253,6 +269,7 @@ function pick(id, scroll) {
   document.querySelectorAll('.course').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.id === id)));
   buildForm(c);
   $('#form').hidden = false; $('#progress').hidden = false; $('#done').hidden = true;
+  SurveyShare.selectCourse(c);
   if (scroll) setTimeout(() => $('#sections').scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
 }
 
@@ -532,6 +549,7 @@ function showDone(name, demo) {
 }
 
 // ---------- boot ----------
+SurveyShare.init({ phase: PHASE });
 renderCourses();
 (() => {
   // 支援以 ?course=echo 或 #echo 直接帶入課程（可各課程各做一個 QR Code）

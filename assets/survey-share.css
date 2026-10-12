@@ -1,0 +1,12 @@
+.survey-share{margin-top:8px;text-align:center}
+.survey-share h2{font-size:24px;margin:8px 0}
+.survey-share p{margin:8px 0;color:var(--muted)}
+.survey-share canvas{display:block;width:240px;max-width:100%;height:auto;margin:20px auto;background:#fff}
+.survey-share .share-course{color:var(--ink);font-weight:900}
+.share-actions{display:flex;flex-wrap:wrap;justify-content:center;gap:14px;margin:18px 0}
+.share-actions .btn{font-size:17px;padding:10px 20px;text-decoration:none}
+.share-actions .share-open{background:var(--white)}
+.share-actions .btn:focus-visible{outline:3px solid var(--accent);outline-offset:4px}
+.share-actions .btn:disabled{opacity:.6;cursor:wait}
+.survey-share .share-url{display:block;color:var(--accent-text);font-size:12px;overflow-wrap:anywhere}
+.survey-share .share-status{min-height:1.6em;font-size:14px}
