@@ -216,10 +216,12 @@ const COURSES = [
   { id: 'echo', short: '心臟超音波', name: '心臟超音波課程', skills: ['選擇探頭並設定心臟超音波模式與參數', '取得標準切面（PLAX、PSAX、A4C、Subcostal）', '目視評估左心室收縮功能', '辨識心包膜積液', '判斷右心室是否擴大', '評估下腔靜脈（IVC）大小與呼吸變化'] },
   { id: 'endo', short: '內視鏡', name: '內視鏡模擬課程', skills: ['檢查前準備與病人安全評估（禁食、抗凝血藥物、鎮靜風險）', '正確握持內視鏡並以旋鈕控制鏡頭方向', '插入食道並通過幽門進入十二指腸', '執行胃內反轉（retroflexion）觀察賁門與胃底', '依系統化順序完整觀察並拍攝標準位置影像', '辨識常見病灶（如潰瘍、出血點、腫瘤）', '執行組織切片'] },
   { id: 'abd', short: '腹部超音波', name: '腹部超音波課程', skills: ['依切面需求選擇探頭並設定機器參數', '取得右上腹肝腎介面（Morison’s pouch）影像', '取得左上腹脾腎介面影像', '取得骨盆腔（膀胱周圍）影像', '判斷腹腔內是否有游離液體', '辨識膽囊並評估有無膽結石', '測量腹主動脈直徑'] },
-  { id: 'lap', short: '腹腔鏡', name: '腹腔鏡課程', career: true, skills: ['氣腹建立與 trocar 置放原則', '扶鏡並維持穩定、置中視野（含 30 度鏡）', '克服支點效應，器械方向正確', '在 2D 螢幕判斷深度與距離', '雙手協調操作（含非慣用手）', '以抓鉗轉移物件（peg transfer）', '腔內縫合與打結', '安全使用電燒等能量器械'] },
+  { id: 'lap', short: '腹腔鏡', name: '腹腔鏡課程', career: true, skills: ['正確握持與開合腹腔鏡器械', '克服支點效應，器械方向正確', '在 2D 螢幕判斷深度與距離', '雙手協調操作（含非慣用手）', '精準夾取並放置小物件（夾豆子）', '雙手配合完成繞圈圈關卡', '腔內縫合'] },
 ];
 const SAT = ['課程內容符合我的學習需求與上課前的期待', '講師的示範與回饋清楚、具體且有幫助', '模擬器／教具有助於我練習與學習', '課程所學對我未來的臨床工作有幫助', '我會推薦其他學員參加此課程'];
 const SAT_SHORT = ['課程內容', '講師教學', '模擬設備', '臨床應用', '推薦意願'];
+const LAP_TIME = '每一關的練習時間足夠';
+const LAP_SAT = [['課程內容符合我上課前的期待', 0], ['學到的東西對我未來臨床工作有幫助', 3], [LAP_TIME, -1], ['老師的示範與回饋清楚有用', 1], ['我會推薦其他 PGY 來上這堂課', 4]];
 const EXP = ['從未使用過', '1–3 次', '4–10 次', '超過 10 次'];
 const IDS = ['UGY', 'PGY1', 'PGY2', '住院醫師'];
 
@@ -359,7 +361,10 @@ function courseData(c, filt = true) {
   const confDiffs = pairs.map(p => { const a = confMean(p.pre), b = confMean(p.post); return a != null && b != null ? b - a : null; }).filter(x => x != null);
   const readyDiffs = pairs.map(p => { const a = num(p.pre['臨床準備度']), b = num(p.post['臨床準備度']); return a != null && b != null ? b - a : null; }).filter(x => x != null);
   const sat = SAT.map(s => post.map(r => num(r[`滿意度｜${s}`])).filter(x => x != null));
-  const overall = post.map(r => num(r['整體滿意度'])).filter(x => x != null);
+  const lapTime = post.map(r => num(r[`滿意度｜${LAP_TIME}`])).filter(x => x != null);
+  const overall = c.career
+    ? post.map(r => { const v = [...SAT.map(s => num(r[`滿意度｜${s}`])), num(r[`滿意度｜${LAP_TIME}`])].filter(x => x != null); return v.length ? Math.round(mean(v)) : null; }).filter(x => x != null)
+    : post.map(r => num(r['整體滿意度'])).filter(x => x != null);
   return {
     c, pre, post, pairs, sessions, skills, confMean,
     confPre: mean(pre.map(confMean)), confPost: mean(post.map(confMean)),
@@ -368,7 +373,8 @@ function courseData(c, filt = true) {
     readyD: mean(readyDiffs), readyW: wilcoxon(readyDiffs),
     sat, satMeans: sat.map(mean), satAll: mean(sat.flat()), overall: mean(overall), overallArr: overall,
     recommend: sat[4].length ? sat[4].filter(x => x >= 4).length / sat[4].length : null,
-    practiceLow: post.length ? post.filter(r => r['實作練習時間'] === '太少').length / post.length : null,
+    practiceLow: c.career ? (lapTime.length ? lapTime.filter(x => x <= 2).length / lapTime.length : null) : (post.length ? post.filter(r => r['實作練習時間'] === '太少').length / post.length : null),
+    lapTime, overallLabel: c.career ? '課程評價平均' : '整體滿意度',
   };
 }
 
@@ -426,7 +432,7 @@ function viewOverview() {
         <dt>技能信心</dt><dd>${f1(d.confPre)} → ${f1(d.confPost)}</dd>
         <dt>同一人提升</dt><dd class="${d.confD > 0 ? 'up' : ''}">${fd(d.confD)}</dd>
         <dt>臨床準備度</dt><dd>${f1(d.readyPre)} → ${f1(d.readyPost)}</dd>
-        <dt>整體滿意度</dt><dd>${f1(d.overall)}</dd>
+        <dt>${d.overallLabel}</dt><dd>${f1(d.overall)}</dd>
       </dl>
       <span class="more">查看課程分析 <b>›››</b></span>
     </button>`).join('')}</div>`;
@@ -497,7 +503,7 @@ function viewCourse(c) {
     ${kpi('前後測都完成', d.pairs.length + '<small> 人</small>', '後測回收 ' + pct(d.pairs.length, d.pre.length))}
     ${kpi('技能信心', f1(d.confPre) + ' → ' + f1(d.confPost), '同一人提升 ' + fd(d.confD) + (d.confW.p != null ? '｜p ' + fp(d.confW.p) : ''), d.confD > 0 ? 'up' : '')}
     ${kpi('臨床準備度', f1(d.readyPre) + ' → ' + f1(d.readyPost), '同一人提升 ' + fd(d.readyD) + (d.readyW.p != null ? '｜p ' + fp(d.readyW.p) : ''), d.readyD > 0 ? 'up' : '')}
-    ${kpi('整體滿意度', f1(d.overall) + '<small> / 5</small>', '推薦同意率 ' + (d.recommend == null ? '—' : Math.round(d.recommend * 100) + '%'))}
+    ${kpi(d.overallLabel, f1(d.overall) + '<small> / 5</small>', '推薦同意率 ' + (d.recommend == null ? '—' : Math.round(d.recommend * 100) + '%'))}
   </div>`;
 
   const skillChart = card('各技能信心：前測 → 後測', '點為所有填答者平均（1–5 分），右側為同一人前後平均提升；滑過可看檢定結果。',
@@ -508,13 +514,16 @@ function viewCourse(c) {
     </tbody></table></div><div class="note">p 值為 Wilcoxon 符號等級檢定（同一人前後比較，小樣本採精確檢定）；p &lt; .05 以綠字標示。有變化的人數少於 3 人時顯示「樣本不足」。</div>`);
 
   const satCard = card('課程滿意度', `後測 ${d.post.length} 份，各題 1–5 分分布。`,
-    likertRows([...SAT.map((s, i) => ({ t: SAT_SHORT[i] + '｜' + s, arr: d.sat[i] })), { t: '整體滿意度', arr: d.overallArr }]) +
+    likertRows(c.career
+      ? LAP_SAT.map(([t, i]) => ({ t, arr: i < 0 ? d.lapTime : d.sat[i] }))
+      : [...SAT.map((s, i) => ({ t: SAT_SHORT[i] + '｜' + s, arr: d.sat[i] })), { t: '整體滿意度', arr: d.overallArr }]) +
     lkKey(['非常不同意／非常不滿意', '不同意', '普通', '同意', '非常同意'])) ;
 
   const readyCard = card('臨床準備度與實作時間', '',
     `<div class="sec">臨床準備度（1 完全沒準備好 → 5 完全準備好）</div>` +
     distCompare([1, 2, 3, 4, 5].map(String), d.pre.map(r => String(num(r['臨床準備度']))), d.post.map(r => String(num(r['臨床準備度'])))) +
-    `<div class="sec">實作練習時間</div>` + bars(count(d.post.map(r => r['實作練習時間']), ['太少', '剛好', '太多']), d.post.length));
+    (c.career ? `<div class="sec">每一關的練習時間足夠（1 非常不同意 → 5 非常同意）</div>` + bars(count(d.lapTime.map(String), ['1', '2', '3', '4', '5']), d.lapTime.length)
+              : `<div class="sec">實作練習時間</div>` + bars(count(d.post.map(r => r['實作練習時間']), ['太少', '剛好', '太多']), d.post.length)));
 
   const bg = card('學員背景（前測）', `前測 ${d.pre.length} 份`,
     `<div class="sec">身分</div>` + bars(count(d.pre.map(r => r['身分']), IDS), d.pre.length) +
@@ -523,14 +532,21 @@ function viewCourse(c) {
 
   const expect = card('課前期待與擔心', '最希望學到（可複選）與最擔心的部分',
     `<div class="sec">最希望學到</div>` + bars(countMulti(d.pre.map(r => r['最希望學到'])), d.pre.length, true) +
-    `<div class="sec">最擔心</div>` + bars(count(d.pre.map(r => r['最擔心'])), d.pre.length, true));
+    `<div class="sec">最擔心</div>` + bars(countMulti(d.pre.map(r => r['最擔心'])), d.pre.length, true));
 
-  let career = '';
+  let career = '', lapExp = '';
   if (c.career) {
     career = card('外科職涯意向', '腹腔鏡課程專屬題組',
-      `<div class="sec">課前：未來走外科系的意願</div>` + bars(count(d.pre.map(r => r['外科意願']), ['1 完全不考慮', '2 不太可能', '3 不確定', '4 可能會', '5 幾乎確定']), d.pre.length) +
+      `<div class="sec">未來走外科系的意願（前測 → 後測）</div>` + distCompare(['1', '2', '3', '4', '5'], d.pre.map(r => String(num(r['外科意願']))), d.post.map(r => String(num(r['外科意願'])))) +
+      `<div class="note" style="margin-top:4px">1 完全不考慮、2 不太可能、3 不確定、4 可能會、5 幾乎確定</div>` +
       `<div class="sec">課前：最可能選擇的專科方向</div>` + bars(count(d.pre.map(r => r['專科方向'])), d.pre.length, true) +
       `<div class="sec">課後：這堂課對走外科意願的影響</div>` + bars(count(d.post.map(r => r['對外科意願的影響']), ['明顯提高', '稍微提高', '沒有影響', '稍微降低', '明顯降低']), d.post.length));
+    const PARTS = ['器械介紹', '夾豆子', '繞圈圈', '縫合', '3D 模擬機'];
+    lapExp = card('關卡與 3D 模擬機', '腹腔鏡課程專屬題組（後測）',
+      `<div class="sec">最有幫助 vs 最困難的部分</div>` + partsCompare(PARTS, d.post.map(r => r['最有幫助的部分']), d.post.map(r => r['最困難的部分'])) +
+      `<div class="sec">和 2D 模擬箱相比，3D 模擬機對深度判斷精準度的影響</div>` + bars(count(d.post.map(r => r['3D對深度判斷的影響']), ['明顯提高', '稍微提高', '沒有影響', '稍微降低', '明顯降低']), d.post.length) +
+      `<div class="sec">未來自主練習想用</div>` + bars(count(d.post.map(r => r['自主練習偏好']), ['腹腔鏡模擬箱', '3D 模擬機', '兩者都想', '不會想再練']), d.post.length) +
+      `<div class="sec">課前：腹腔鏡基本技能對未來工作的重要性</div>` + bars(count(d.pre.map(r => r['技能重要性']), ['1 完全不重要', '2', '3', '4', '5 非常重要']), d.pre.length));
   }
 
   // 填答追蹤
@@ -545,7 +561,7 @@ function viewCourse(c) {
       return `<tr><td>${esc(p.name)}</td><td>${esc(p.id || '')}</td><td>${p.pre ? '<span class="flag ok">已填</span>' : '<span class="flag miss">未填</span>'}</td><td>${p.post ? '<span class="flag ok">已填</span>' : '<span class="flag miss">未填</span>'}</td><td class="n">${f1(a)}</td><td class="n">${f1(b)}</td><td class="n ${df > 0 ? 'up' : df < 0 ? 'down' : ''}">${fd(df)}</td></tr>`; }).join('')}
     </tbody></table></div><div class="note">信心為該學員所有技能題的平均。同一人重複填答時，以最後一次為準。</div>`);
 
-  const fbList = (key) => { const items = d.post.filter(r => String(r[key] || '').trim()); return items.length ? `<div class="fb">${items.map(r => `<div class="fb-item">${esc(r[key])}<small>${esc(r['身分'] || '')}｜${dayKey(r._d)}</small></div>`).join('')}</div>` : '<p class="empty">尚無回饋</p>'; };
+  const fbList = (key, src = d.post) => { const items = src.filter(r => String(r[key] || '').trim()); return items.length ? `<div class="fb">${items.map(r => `<div class="fb-item">${esc(r[key])}<small>${esc(r['身分'] || '')}｜${dayKey(r._d)}</small></div>`).join('')}</div>` : '<p class="empty">尚無回饋</p>'; };
   const fb = `<div class="grid g2">${card('最有幫助的內容', '後測簡答，依身分與日期顯示，不列姓名', fbList('最有幫助的內容'))}${card('回饋與建議', '學員想開的課程與想說的話', fbList('回饋與建議'))}</div>`;
 
   // ---- 分析註解 ----
@@ -564,7 +580,7 @@ function viewCourse(c) {
     const ms = d.satMeans.map((v, i) => ({ v, k: SAT_SHORT[i] })).filter(x => x.v != null);
     const hi = topBy(ms, x => x.v), lo = lowBy(ms, x => x.v);
     iSat2 = `評價最高的是${q(hi.k)}（${f1(hi.v)} 分）` + (hi.k !== lo.k ? `，相對較低的是${q(lo.k)}（${f1(lo.v)} 分）` : '') +
-      `。整體滿意度 ${f1(d.overall)} 分，${d.recommend == null ? '' : `${Math.round(d.recommend * 100)}% 的學員會推薦其他人來上`}${d.overall >= 4.5 ? '，學員非常喜歡這堂課。' : d.overall >= 4 ? '，整體評價良好。' : '，建議參考下方回饋調整課程。'}`;
+      `。${d.overallLabel} ${f1(d.overall)} 分，${d.recommend == null ? '' : `${Math.round(d.recommend * 100)}% 的學員會推薦其他人來上`}${d.overall >= 4.5 ? '，學員非常喜歡這堂課。' : d.overall >= 4 ? '，整體評價良好。' : '，建議參考下方回饋調整課程。'}`;
   }
   const rp = d.post.map(r => num(r['臨床準備度'])).filter(x => x != null);
   let iReady = d.readyPre != null && d.readyPost != null
@@ -579,7 +595,7 @@ function viewCourse(c) {
   }
   let iExp = '尚無前測資料。';
   if (d.pre.length) {
-    const t = countMulti(d.pre.map(r => r['最希望學到'])), w = count(d.pre.map(r => r['最擔心']));
+    const t = countMulti(d.pre.map(r => r['最希望學到'])), w = countMulti(d.pre.map(r => r['最擔心']));
     iExp = (t.length ? `學員最想學的是${q(t[0][0])}（${t[0][1]} 人）` + (t[1] ? `，其次是${q(t[1][0])}` : '') + '。' : '') +
       (w.length ? `最常見的擔心是${q(w[0][0])}（${w[0][1]} 人），可提供給講師在課程中優先回應。` : '');
   }
@@ -587,15 +603,27 @@ function viewCourse(c) {
   if (c.career && d.pre.length) {
     const will = d.pre.filter(r => (num(r['外科意願']) || 0) >= 4).length;
     const upN = d.post.filter(r => /提高/.test(r['對外科意願的影響'] || '')).length;
-    iCar = `課前有 ${pct(will, d.pre.length)} 的學員可能或幾乎確定走外科系。` + (d.post.length ? `課後 ${pct(upN, d.post.length)} 表示這堂課提高了走外科的意願${upN / d.post.length >= .5 ? '，課程對外科招募有正面幫助' : ''}。` : '');
+    const willPost = d.post.filter(r => (num(r['外科意願']) || 0) >= 4).length;
+    iCar = `課前有 ${pct(will, d.pre.length)} 的學員可能或幾乎確定走外科系` + (d.post.length ? `，課後為 ${pct(willPost, d.post.length)}。另有 ${pct(upN, d.post.length)} 表示這堂課提高了走外科的意願${upN / d.post.length >= .5 ? '，課程對外科招募有正面幫助' : ''}。` : '。');
+  }
+  let iLap = '';
+  if (c.career && d.post.length) {
+    const h = count(d.post.map(r => r['最有幫助的部分'])), hd = count(d.post.map(r => r['最困難的部分']));
+    const d3 = d.post.filter(r => /提高/.test(r['3D對深度判斷的影響'] || '')).length;
+    const want = d.post.filter(r => r['自主練習偏好'] && r['自主練習偏好'] !== '不會想再練').length;
+    iLap = (h.length ? `學員覺得最有幫助的是${q(h[0][0])}（${h[0][1]} 人）` : '') + (hd.length ? `，最困難的是${q(hd[0][0])}（${hd[0][1]} 人），可考慮在這一關多安排示範或練習時間。` : '。') +
+      `${pct(d3, d.post.length)} 認為 3D 模擬機提高了深度判斷的精準度；${pct(want, d.post.length)} 的學員未來還想自主練習${want / d.post.length >= .7 ? '，可考慮開放練習時段' : ''}。`;
   }
   const pD = people.map(p => p.pre && p.post ? d.confMean(p.post) - d.confMean(p.pre) : null).filter(x => x != null);
   const missNames = people.filter(p => !p.pre || !p.post).map(p => p.name);
   let iTrack = `前後測都完成的有 ${d.pairs.length} 人。` + (missNames.length ? `尚未完成的有 ${missNames.length} 人：${missNames.slice(0, 6).map(esc).join('、')}${missNames.length > 6 ? ' 等' : ''}，可提醒補填。` : '所有學員都已完成。') +
     (pD.length ? `個人信心提升範圍為 ${fd(Math.min(...pD))} 到 ${fd(Math.max(...pD))} 分${pD.some(x => x <= 0) ? '，有學員課後沒有進步，可個別關心' : ''}。` : '');
-  const nHelp = d.post.filter(r => String(r['最有幫助的內容'] || '').trim()).length, nFb = d.post.filter(r => String(r['回饋與建議'] || '').trim()).length;
-  const fbCards = `<div class="grid g2">${addI(card('最有幫助的內容', '後測簡答，依身分與日期顯示，不列姓名', fbList('最有幫助的內容')), nHelp ? `共收到 ${nHelp} 則回饋，可從中找出學員最有感的教學方式，作為課程的固定亮點。` : '')}${addI(card('回饋與建議', '學員想開的課程與想說的話', fbList('回饋與建議')), nFb ? `共 ${nFb} 位學員留言（${pct(nFb, d.post.length)}），其中提到的新課程需求可作為中心下一步開課的參考。` : '')}</div>`;
-  return `<div class="grid">${kpis}${addI(skillChart, iSkill)}<div class="grid g2">${addI(satCard, iSat2)}${addI(readyCard, iReady)}</div><div class="grid g2">${addI(bg, iBg)}${addI(expect, iExp)}</div>${addI(career, iCar)}${addI(track, iTrack)}${fbCards}</div>`;
+  const helpKey = c.career ? '想讓老師知道' : '最有幫助的內容', helpSrc = c.career ? d.pre : d.post;
+  const nHelp = helpSrc.filter(r => String(r[helpKey] || '').trim()).length, nFb = d.post.filter(r => String(r['回饋與建議'] || '').trim()).length;
+  const fbCards = `<div class="grid g2">${c.career
+    ? addI(card('課前想讓老師知道的', '前測選填，依身分與日期顯示，不列姓名', fbList(helpKey, helpSrc)), nHelp ? `共 ${nHelp} 位學員在課前留言，可在上課前轉給講師參考。` : '')
+    : addI(card('最有幫助的內容', '後測簡答，依身分與日期顯示，不列姓名', fbList(helpKey, helpSrc)), nHelp ? `共收到 ${nHelp} 則回饋，可從中找出學員最有感的教學方式，作為課程的固定亮點。` : '')}${addI(card('回饋與建議', '學員想開的課程與想說的話', fbList('回饋與建議')), nFb ? `共 ${nFb} 位學員留言（${pct(nFb, d.post.length)}），其中提到的新課程需求可作為中心下一步開課的參考。` : '')}</div>`;
+  return `<div class="grid">${kpis}${addI(skillChart, iSkill)}<div class="grid g2">${addI(satCard, iSat2)}${addI(readyCard, iReady)}</div><div class="grid g2">${addI(bg, iBg)}${addI(expect, iExp)}</div>${c.career ? `<div class="grid g2">${addI(career, iCar)}${addI(lapExp, iLap)}</div>` : ''}${addI(track, iTrack)}${fbCards}</div>`;
 }
 
 // ---------- components ----------
@@ -622,6 +650,14 @@ function distCompare(cats, a, b) {
   return `<div class="bars">${cats.map((k, i) => `<div class="bar-row" style="grid-template-columns:2.2em 1fr 3.4em"><span class="t"><b>${k}</b> 分</span>
     <div style="display:flex;flex-direction:column;gap:3px"><div class="bar-track" style="height:9px"><div class="bar-fill" style="width:${ca[i][1] / max * 100}%;background:var(--pre)"></div></div><div class="bar-track" style="height:9px"><div class="bar-fill" style="width:${cb[i][1] / max * 100}%;background:var(--post)"></div></div></div>
     <span class="v" style="font-size:11.5px;line-height:1.25">${ca[i][1]}<br>${cb[i][1]}</span></div>`).join('')}</div>`;
+}
+function partsCompare(cats, a, b) {
+  const ca = count(a, cats), cb = count(b, cats);
+  const max = Math.max(1, ...ca.map(e => e[1]), ...cb.map(e => e[1]));
+  return `<div class="bars">${cats.map((k, i) => `<div class="bar-row" style="grid-template-columns:6em 1fr 4.2em"><span class="t"><b>${esc(k)}</b></span>
+    <div style="display:flex;flex-direction:column;gap:3px"><div class="bar-track" style="height:9px"><div class="bar-fill" style="width:${ca[i][1] / max * 100}%;background:var(--post)"></div></div><div class="bar-track" style="height:9px"><div class="bar-fill" style="width:${cb[i][1] / max * 100}%;background:var(--neg2)"></div></div></div>
+    <span class="v" style="font-size:11.5px;line-height:1.25">幫助 ${ca[i][1]}<br>困難 ${cb[i][1]}</span></div>`).join('')}</div>
+    <div class="lk-key"><span><i style="background:var(--post)"></i>最有幫助</span><span><i style="background:var(--neg2)"></i>最困難</span></div>`;
 }
 const LK = ['var(--neg2)', 'var(--neg1)', 'var(--mid)', 'var(--pos1)', 'var(--pos2)'];
 function likertRows(rows) {
@@ -715,10 +751,22 @@ function demoData() {
         r1['最希望學到'] = demoTopics(c.id, rnd).join('；');
         r1['最擔心'] = demoWorry(c.id, rnd);
         if (c.career) { r1['外科意願'] = pickW(['1 完全不考慮', '2 不太可能', '3 不確定', '4 可能會', '5 幾乎確定'], [1, 2, 3, 2, 1]); r1['專科方向'] = pickW(['外科系（一般外科、泌尿、婦產、大腸直腸、胸腔等需手術之科）', '非外科系（內科、家醫、急診、影像等）', '還沒決定'], [2, 2, 3]); r2['對外科意願的影響'] = pickW(['明顯提高', '稍微提高', '沒有影響', '稍微降低', '明顯降低'], [1, 3, 3, .3, .1]); }
-        SAT.forEach(s => r2[`滿意度｜${s}`] = clamp(p.sat + rnd() * 1.2 - .7));
-        r2['整體滿意度'] = String(clamp(p.sat + rnd() * 1.1 - .6));
-        r2['實作練習時間'] = pickW(['太少', '剛好', '太多'], [2, 7, .3]);
-        r2['最有幫助的內容'] = helpful[Math.floor(rnd() * helpful.length)];
+        if (c.career) {
+          [0, 1, 3, 4].forEach(i => r2[`滿意度｜${SAT[i]}`] = clamp(p.sat + rnd() * 1.2 - .7));
+          r2[`滿意度｜${LAP_TIME}`] = clamp(p.sat - .4 + rnd() * 1.4 - .7);
+          r2['外科意願'] = String(clamp(num(r1['外科意願']) + (rnd() > .6 ? 1 : 0)));
+          const parts = ['器械介紹', '夾豆子', '繞圈圈', '縫合', '3D 模擬機'];
+          r2['最有幫助的部分'] = pickW(parts, [1, 3, 2, 2, 3]); r2['最困難的部分'] = pickW(parts, [.2, 1, 2, 5, .5]);
+          r2['3D對深度判斷的影響'] = pickW(['明顯提高', '稍微提高', '沒有影響', '稍微降低', '明顯降低'], [3, 3, 1, .2, 0]);
+          r2['自主練習偏好'] = pickW(['腹腔鏡模擬箱', '3D 模擬機', '兩者都想', '不會想再練'], [1, 2, 4, .3]);
+          r1['技能重要性'] = pickW(['1 完全不重要', '2', '3', '4', '5 非常重要'], [.2, .5, 2, 3, 2]);
+          r1['想讓老師知道'] = rnd() > .5 ? '第一次碰腹腔鏡，有點緊張' : '';
+        } else {
+          SAT.forEach(s => r2[`滿意度｜${s}`] = clamp(p.sat + rnd() * 1.2 - .7));
+          r2['整體滿意度'] = String(clamp(p.sat + rnd() * 1.1 - .6));
+          r2['實作練習時間'] = pickW(['太少', '剛好', '太多'], [2, 7, .3]);
+          r2['最有幫助的內容'] = helpful[Math.floor(rnd() * helpful.length)];
+        }
         r2['回饋與建議'] = rnd() > .5 ? sugg[Math.floor(rnd() * sugg.length)] : '';
         pre.push(r1);
         if (rnd() > .1) post.push(r2);
@@ -732,13 +780,13 @@ function demoTopics(id, rnd) {
   const T = { echo: ['標準切面取得（PLAX、PSAX、A4C、Subcostal）', '左心室收縮功能目視評估', '心包膜積液辨識', '下腔靜脈（IVC）評估', '休克病人床邊評估流程'],
     endo: ['握鏡姿勢與旋鈕操控', '插入食道與通過幽門', '胃內反轉（retroflexion）', '常見病灶辨識', '組織切片操作'],
     abd: ['右上腹（肝腎介面）切面', '腹腔游離液體判讀（FAST）', '膽囊與膽結石評估', '骨盆腔（膀胱周圍）切面', '腹主動脈評估'],
-    lap: ['扶鏡技巧（含 30 度鏡）', '基本手眼協調（peg transfer、剪裁）', '腔內縫合與打結', '擔任扶鏡手／第一助手的角色與禁忌', '了解外科系的工作與職涯'] }[id];
+    lap: ['腹腔鏡器械的認識與正確握持', '手眼協調與器械方向感', '精準夾取（夾豆子）', '雙手配合（繞圈圈）', '體驗 3D 模擬機', '腔內縫合'] }[id];
   const pickd = T.filter(() => rnd() > .5).slice(0, 3);
   return pickd.length ? pickd : [T[0]];
 }
 function demoWorry(id, rnd) {
   const W = { echo: ['找不到切面或影像品質不佳', '解剖構造辨識困難', '探頭方向與手部操作不順'], endo: ['鏡頭方向控制不順', '插入食道或通過幽門困難', '擔心造成病人不適或併發症'],
-    abd: ['找不到切面或影像被腸氣／肋骨遮蔽', '不確定是否為游離液體', '探頭方向與手部操作不順'], lap: ['手眼協調、器械方向相反（fulcrum effect）', '在 2D 畫面判斷深度', '扶鏡扶不好、跟不上主刀'] }[id];
+    abd: ['找不到切面或影像被腸氣／肋骨遮蔽', '不確定是否為游離液體', '探頭方向與手部操作不順'], lap: ['器械方向跟手相反，手不聽使喚', '畫面上判斷不出前後距離', '非慣用手不靈活', '縫合太難'] }[id];
   return W[Math.floor(rnd() * W.length)];
 }
 
