@@ -192,9 +192,17 @@ input[type=text]:focus,textarea:focus{outline:none;box-shadow:0 0 0 3px var(--po
   </header>
 
   <section class="card" aria-labelledby="pick-h">
-    <div class="tab" id="pick-h"><span class="no">STEP 1</span>選擇今天的課程</div>
-    <p class="intro">點選你今天上完的課程，就會出現這堂課的後測與滿意度題目。請在課程結束後完成。</p>
+    <div class="tab" id="pick-h"><span class="no">STEP 1</span>選擇要填寫的課程</div>
+    <p class="intro">點選你參加的課程，就會出現這堂課的後測與滿意度題目。請在課程結束後完成。</p>
     <div class="courses" id="courses"></div>
+  </section>
+
+  <section class="card" id="sessionCard" hidden aria-labelledby="sessionLabel">
+    <div class="tab"><span class="no">STEP 2</span><label id="sessionLabel" for="sessionSelect">選擇上課場次</label></div>
+    <p class="intro" id="sessionHint" role="status">正在載入場次…</p>
+    <div class="textin"><select id="sessionSelect" required disabled style="width:100%;padding:12px;font:inherit"><option value="">請選擇上課場次</option></select></div>
+    <button class="btn" id="sessionRetry" type="button" style="margin-top:12px">重新載入場次</button>
+    <p id="sessionError" role="alert" hidden>請先選擇上課場次，再送出問卷。</p>
   </section>
 
   <div class="progress" id="progress" hidden><span>填答進度</span><div class="bar"><i id="barfill"></i></div><span class="pct" id="pct">0 / 0</span></div>
@@ -236,6 +244,8 @@ input[type=text]:focus,textarea:focus{outline:none;box-shadow:0 0 0 3px var(--po
 
 <script src="assets/vendor/qrcode.js"></script>
 <script src="assets/survey-share.js"></script>
+<script src="assets/course-sessions.js"></script>
+<script src="assets/survey-sessions.js"></script>
 <script>
 // ===== 設定：部署 Google Apps Script 後，把網址貼在這裡 =====
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwQkTfzyyIxux8yMf93oNTXn5YeXMQ2BUCgBypVnjHsgmf7LtLoTzrqWwEJB1pZ7_EC/exec';
@@ -272,6 +282,7 @@ function pick(id, scroll) {
   buildForm(c);
   $('#form').hidden = false; $('#progress').hidden = false; $('#done').hidden = true;
   SurveyShare.selectCourse(c);
+  SurveySessions.selectCourse(c);
   if (scroll) setTimeout(() => $('#sections').scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
 }
 
@@ -492,6 +503,8 @@ function updateProgress() {
 $('#form').addEventListener('submit', async e => {
   e.preventDefault();
   $('#formerr').hidden = true;
+  const session = SurveySessions.requireSelection();
+  if (!session) return;
   const missing = questions.filter(q => !isDone(q));
   questions.forEach(q => $(`#q-${q.n}`).classList.toggle('missing', missing.includes(q)));
   missing.filter(q => q.t === 'likert').forEach(q => {
@@ -504,7 +517,7 @@ $('#form').addEventListener('submit', async e => {
     return;
   }
 
-  const row = { '時間戳記': new Date().toLocaleString('zh-TW', { hour12: false }), '問卷': PHASE_LABEL, '課程': current.name };
+  const row = { '時間戳記': new Date().toLocaleString('zh-TW', { hour12: false, timeZone: 'Asia/Taipei' }), '問卷': PHASE_LABEL, '課程': current.name, '場次ID': session.id, '上課日期': session.date };
   questions.forEach(q => {
     const v = valueOf(q);
     if (q.t === 'likert') q.items.forEach((it, i) => { row[`${q.k}｜${itK(it)}`] = v[i]; });
@@ -514,24 +527,23 @@ $('#form').addEventListener('submit', async e => {
     if (q.remember) store.set(q.remember, v);
   });
 
+  const paused = [...document.querySelectorAll('.course, #sessionSelect, #sessionRetry, #form input, #form textarea')].map(el => [el, el.disabled]);
+  paused.forEach(([el]) => { el.disabled = true; });
   const btn = $('#submitBtn');
   btn.disabled = true; btn.firstChild.textContent = '送出中…';
   let demo = !SCRIPT_URL;
   try {
     if (!demo) {
-      await fetch(SCRIPT_URL, {
-        method: 'POST', mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ sheet: `${current.short}_${PHASE_LABEL}`, row }),
-      });
+      await SurveySessions.send(SCRIPT_URL, { sheet: `${current.short}_${PHASE_LABEL}`, row });
     } else {
       console.log('[示範模式] 未設定 SCRIPT_URL，以下為將送出的資料：', row);
     }
     showDone(row['姓名'], demo);
   } catch (err) {
-    $('#formerr').textContent = '送出失敗，請確認網路連線後再按一次「送出問卷」。';
+    $('#formerr').textContent = '尚未完成收件確認：' + (err.name === 'AbortError' ? '連線逾時，請稍後重試。' : err.message || '請確認網路連線後重試。');
     $('#formerr').hidden = false;
   } finally {
+    paused.forEach(([el, disabled]) => { el.disabled = disabled; });
     btn.disabled = false; btn.firstChild.textContent = '送出問卷';
   }
 });
@@ -552,6 +564,7 @@ function showDone(name, demo) {
 
 // ---------- boot ----------
 SurveyShare.init({ phase: PHASE });
+SurveySessions.init({ url: SCRIPT_URL, changed: session => SurveyShare.selectSession(session) });
 renderCourses();
 (() => {
   // 支援以 ?course=echo 或 #echo 直接帶入課程（可各課程各做一個 QR Code）

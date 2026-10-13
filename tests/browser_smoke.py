@@ -1,0 +1,190 @@
+"""Browser regression checks with a local server and mocked Apps Script; no live writes."""
+import functools
+import json
+import threading
+import unittest
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from playwright.sync_api import sync_playwright
+
+ROOT = Path(__file__).resolve().parents[1]
+
+def session(identifier, **changes):
+    return {'場次ID': identifier, '課程': '心臟超音波', '上課日期': '2026-10-14', '開始時間': '09:00',
+            '學員人數': 6, '狀態': '已開課', '開放填答': '是', **changes}
+
+CATALOG = [session('echo-A'), session('echo-B', **{'開始時間': '13:00', '學員人數': 8}),
+           session('echo-C', **{'上課日期': '2026-10-28', '狀態': '預定', '學員人數': 10}),
+           session('echo-cancel', **{'狀態': '取消', '學員人數': 30}),
+           session('echo-closed', **{'上課日期': '2026-09-01', '開放填答': '否', '學員人數': ''}),
+           session('endo-A', **{'課程': '內視鏡', '學員人數': 0})]
+
+class QuietHandler(SimpleHTTPRequestHandler):
+    def log_message(self, *_):
+        pass
+
+class BrowserChecks(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.server = ThreadingHTTPServer(('127.0.0.1', 0), functools.partial(QuietHandler, directory=str(ROOT)))
+        cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
+        cls.thread.start()
+        cls.base = f'http://127.0.0.1:{cls.server.server_port}/'
+        cls.pw = sync_playwright().start()
+        cls.browser = cls.pw.chromium.launch(executable_path='/usr/bin/chromium', headless=True, args=['--no-sandbox'])
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.browser.close(); cls.pw.stop(); cls.server.shutdown(); cls.server.server_close()
+
+    def setUp(self):
+        self.context = self.browser.new_context()
+        self.page = self.context.new_page()
+        self.errors = []; self.sent = []; self.reject = False; self.catalog_fail = False
+        self.page.on('pageerror', lambda e: self.errors.append(str(e)))
+        self.page.route('https://fonts.googleapis.com/**', lambda r: r.abort())
+        self.page.route('https://fonts.gstatic.com/**', lambda r: r.abort())
+        self.page.route('https://script.google.com/**', self.backend)
+
+    def tearDown(self):
+        self.assertEqual(self.errors, [])
+        self.context.close()
+
+    def backend(self, route):
+        request = route.request
+        if request.method == 'POST':
+            self.sent.append(json.loads(request.post_data))
+            result = {'ok': True}
+        elif 'action=receipt' in request.url:
+            result = {'ok': not self.reject, 'received': True}
+            if self.reject: result['error'] = '場次不存在或未開放填答'
+        elif self.catalog_fail:
+            result = {'ok': False, 'error': '清單尚未建立'}
+        else:
+            # Public projection intentionally lacks student counts.
+            result = {'ok': True, 'sessions': [{k: v for k, v in s.items() if k != '學員人數'} for s in CATALOG]}
+        route.fulfill(status=200, content_type='application/json', body=json.dumps(result))
+
+    def fill_answers(self):
+        self.page.evaluate('''() => {
+          for (const q of questions) {
+            const el = document.getElementById(`q-${q.n}`);
+            if (q.t === 'text' || q.t === 'area') el.querySelector('input,textarea').value = '測試學員';
+            else if (q.t === 'likert') for (let r=0; r<q.items.length; r++) el.querySelector(`input[name="f${q.n}-r${r}"][value="4"]`).checked = true;
+            else {
+              const input = [...el.querySelectorAll('.chips input')].find(i => i.value !== '其他' && i.value !== q.follow?.when);
+              if (input) input.checked = true;
+            }
+            const input = el.querySelector('input,textarea');
+            if (input) input.dispatchEvent(new Event('change', {bubbles:true}));
+          }
+        }''')
+
+    def test_survey_selection_validation_poster_and_confirmed_submission(self):
+        for name in ['pretest.html', 'posttest.html']:
+            with self.subTest(page=name):
+                self.page.goto(self.base + name + '?course=echo')
+                self.page.wait_for_function('!document.getElementById("sessionSelect").disabled')
+                self.assertEqual(self.page.locator('#sessionSelect option').count(), 4)
+                self.page.locator('#submitBtn').click()
+                self.assertTrue(self.page.locator('#sessionError').is_visible())
+                self.assertEqual(len(self.sent), 0)
+                self.page.locator('#sessionSelect').select_option('echo-A')
+                self.page.locator('#submitBtn').click()
+                self.assertTrue(self.page.locator('#formerr').is_visible())
+                self.page.locator('#shareShow').click()
+                self.assertTrue(self.page.locator('#shareDialog').is_visible())
+                self.assertIn('session=echo-A', self.page.locator('#shareOpen').get_attribute('href'))
+                self.assertTrue(self.page.locator('#sharePoster').evaluate('(c) => c.width===1240 && c.height===1754 && c.toDataURL().length>10000'))
+                self.page.locator('#shareClose').click()
+                self.fill_answers(); self.page.locator('#submitBtn').click()
+                self.page.locator('#done').wait_for(state='visible')
+                self.assertEqual(self.sent[-1]['row']['場次ID'], 'echo-A')
+                self.assertEqual(self.sent[-1]['row']['上課日期'], '2026-10-14')
+                self.assertEqual(len(self.sent[-1]['receiptToken']), 36)
+                self.assertFalse(self.page.locator('#form').is_visible())
+                self.sent.clear()
+
+    def test_deep_link_failure_retry_and_wrong_course_are_safe(self):
+        self.catalog_fail = True
+        self.page.goto(self.base + 'pretest.html?course=echo&session=echo-A')
+        self.page.wait_for_function('document.getElementById("sessionHint").textContent.includes("載入失敗")')
+        self.page.locator('#submitBtn').click()
+        self.assertTrue(self.page.locator('#sessionError').is_visible()); self.assertEqual(self.sent, [])
+        self.catalog_fail = False; self.page.locator('#sessionRetry').click()
+        self.page.wait_for_function('document.getElementById("sessionSelect").value==="echo-A"')
+        self.page.locator('[data-id="endo"]').click()
+        self.assertEqual(self.page.locator('#sessionSelect').input_value(), '')
+        self.assertNotIn('session=', self.page.locator('#shareOpen').get_attribute('href'))
+        self.page.goto(self.base + 'pretest.html?course=echo&session=echo-cancel')
+        self.page.wait_for_function('!document.getElementById("sessionSelect").disabled')
+        self.assertEqual(self.page.locator('#sessionSelect').input_value(), '')
+        self.assertIn('未開放', self.page.locator('#sessionHint').inner_text())
+
+    def test_rejected_receipt_keeps_answers_and_reuses_token(self):
+        self.page.goto(self.base + 'posttest.html?course=echo&session=echo-A')
+        self.page.wait_for_function('document.getElementById("sessionSelect").value==="echo-A"')
+        self.fill_answers(); self.reject = True
+        self.page.locator('#submitBtn').click()
+        self.page.wait_for_function('document.getElementById("formerr").textContent.includes("未開放填答")')
+        self.assertFalse(self.page.locator('#done').is_visible()); self.assertTrue(self.page.locator('#form').is_visible())
+        self.assertFalse(self.page.locator('#sessionSelect').is_disabled())
+        self.assertFalse(self.page.locator('#form input').first.is_disabled())
+        token = self.sent[-1]['receiptToken']; self.reject = False
+        self.page.locator('#submitBtn').click(); self.page.locator('#done').wait_for(state='visible')
+        self.assertEqual(self.sent[-1]['receiptToken'], token)
+
+    def apply_fixture(self):
+        self.page.goto(self.base + 'index.html')
+        self.page.evaluate('''catalog => {
+          const raw = demoData(); raw['課程清單'] = catalog;
+          const pre = raw['心臟超音波_前測'][0], post = raw['心臟超音波_後測'][0];
+          const record = (base, name, session, stamp) => ({...base, '姓名':name, '場次ID':session, '上課日期':'2026-10-14', '時間戳記':stamp});
+          raw['心臟超音波_前測'] = [record(pre,'測試甲','echo-A','2026/10/10 09:00:00'), record(pre,'測試甲','echo-A','2026/10/11 09:00:00'), record(pre,'測試甲','echo-B','2026/10/12 09:00:00'), record(pre,'跨場次','echo-A','2026/10/11 09:00:00'), record(pre,'舊資料','','2026/10/14 09:00:00')];
+          raw['心臟超音波_前測'].at(-1)['上課日期']='';
+          raw['心臟超音波_後測'] = [record(post,'測試甲','echo-A','2026/10/14 11:00:00'), record(post,'測試甲','echo-B','2026/10/14 15:00:00'), record(post,'跨場次','echo-B','2026/10/14 15:00:00'), record(post,'舊資料','','2026/10/14 15:00:00')];
+          raw['心臟超音波_後測'].at(-1)['上課日期']='';
+          applyData({data:raw,demo:true});
+        }''', CATALOG)
+
+    def test_overview_registry_counts_and_session_pairing(self):
+        self.apply_fixture()
+        row = self.page.locator('#courseOpening tbody tr').first
+        self.assertEqual(row.locator('td').all_text_contents(), ['心臟超音波','3 場','14 人次（1 場待填）','1 場'])
+        before = row.inner_text(); self.page.locator('#fId').select_option('PGY2')
+        self.assertEqual(row.inner_text(), before)
+        self.page.locator('#fId').select_option('')
+        self.assertEqual(self.page.evaluate("courseData(COURSES[0]).pairs.length"), 2)
+        self.assertEqual(self.page.evaluate("courseData(COURSES[0]).pre.length"), 4)
+        self.assertEqual(self.page.evaluate("courseData(COURSES[0]).pre.find(r=>r['姓名']==='測試甲' && r._session==='session:echo-A')['時間戳記']"), '2026/10/11 09:00:00')
+        self.page.locator('[data-t="echo"]').click()
+        self.assertEqual(self.page.locator('#fSes option').count(), 7)
+        self.page.locator('#fSes').select_option('session:echo-A')
+        self.assertEqual(self.page.evaluate("courseData(COURSES[0]).pre.length"), 2)
+        self.assertEqual(self.page.evaluate("courseData(COURSES[0]).pairs.length"), 1)
+        self.page.locator('#fSes').select_option('__unassigned')
+        self.assertEqual(self.page.evaluate("courseData(COURSES[0]).pairs.length"), 0)
+        self.assertIn('未指定場次', self.page.locator('#view').inner_text())
+        self.page.locator('#logout').click(); self.assertTrue(self.page.locator('#loginForm').is_visible())
+
+    def test_missing_registry_and_all_demo_tabs_still_render(self):
+        self.page.goto(self.base + 'index.html')
+        self.page.evaluate("applyData({data:demoData(),demo:true})")
+        self.assertEqual(self.page.locator('#courseOpening tbody tr').count(), 4)
+        for i in range(5):
+            self.page.locator('#tabs button').nth(i).click()
+            self.assertGreater(len(self.page.locator('#view').inner_text()), 100)
+        self.page.evaluate("const raw=demoData(); delete raw['課程清單']; state.tab='overview'; applyData({data:raw,demo:true})")
+        self.assertIn('尚無有效課程清單', self.page.locator('#view').inner_text())
+        self.assertIn('0 場', self.page.locator('#courseOpening').inner_text())
+
+    def test_small_screen_picker_and_overview_fit(self):
+        self.page.set_viewport_size({'width':390, 'height':844})
+        self.page.goto(self.base + 'pretest.html?course=echo&session=echo-A')
+        self.page.wait_for_function('document.getElementById("sessionSelect").value==="echo-A"')
+        self.assertTrue(self.page.evaluate('document.documentElement.scrollWidth <= innerWidth'))
+        self.apply_fixture()
+        self.assertTrue(self.page.evaluate('document.documentElement.scrollWidth <= innerWidth'))
+
+if __name__ == '__main__':
+    unittest.main(verbosity=2)

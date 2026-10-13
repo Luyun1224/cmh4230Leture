@@ -229,6 +229,7 @@ svg text{font-family:var(--f)}
 </div>
 <div class="tip" id="tip" hidden></div>
 
+<script src="assets/course-sessions.js"></script>
 <script>
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbwQkTfzyyIxux8yMf93oNTXn5YeXMQ2BUCgBypVnjHsgmf7LtLoTzrqWwEJB1pZ7_EC/exec';
 
@@ -355,25 +356,33 @@ function logout(msg) {
 
 function rowsFor(c, phase) {
   const sheet = RAW[`${c.short}_${phase}`] || [];
-  return sheet.map(r => ({ ...r, _d: toDate(r['時間戳記']), _name: normName(r['姓名']) }))
+  const sessions = registeredSessions(c);
+  return sheet.map(r => {
+    const session = CourseSessions.resolve(r, sessions), name = normName(r['姓名']);
+    const key = session ? 'session:' + session.id : '__unassigned';
+    return { ...r, _d: toDate(r['時間戳記']), _name: name, _session: key,
+      _sessionLabel: session ? CourseSessions.label(session) : '未指定場次', _key: JSON.stringify([key, name]) };
+  })
     .filter(r => r._name);
 }
+function registeredSessions(c) { return CourseSessions.read(RAW[CourseSessions.SHEET] || []).sessions.filter(s => s.course === c.id); }
 function latestByName(rows) {
   const m = new Map();
-  rows.forEach(r => { const o = m.get(r._name); if (!o || (r._d && o._d && r._d > o._d)) m.set(r._name, r); });
+  rows.forEach(r => { const o = m.get(r._key); if (!o || (r._d && (!o._d || r._d >= o._d))) m.set(r._key, r); });
   return [...m.values()];
 }
 function courseData(c, filt = true) {
   let pre = latestByName(rowsFor(c, '前測')), post = latestByName(rowsFor(c, '後測'));
-  const sessions = [...new Set([...pre, ...post].map(r => dayKey(r._d)))].sort();
+  const sessions = registeredSessions(c).map(s => ({ id: 'session:' + s.id, label: CourseSessions.label(s) + '｜' + s.status }));
+  if ([...pre, ...post].some(r => r._session === '__unassigned')) sessions.push({ id: '__unassigned', label: '未指定場次（請補登場次ID）' });
   if (filt) {
     if (state.id) { pre = pre.filter(r => r['身分'] === state.id); post = post.filter(r => r['身分'] === state.id); }
-    if (state.ses) { pre = pre.filter(r => dayKey(r._d) === state.ses); post = post.filter(r => dayKey(r._d) === state.ses); }
+    if (state.ses) { pre = pre.filter(r => r._session === state.ses); post = post.filter(r => r._session === state.ses); }
   }
   const conf = (r, s) => num(r[`信心｜${s}`]);
   const confMean = r => mean(c.skills.map(s => conf(r, s)));
-  const postBy = new Map(post.map(r => [r._name, r]));
-  const pairs = pre.filter(r => postBy.has(r._name)).map(r => ({ name: r['姓名'], id: r['身分'] || postBy.get(r._name)['身分'], pre: r, post: postBy.get(r._name) }));
+  const postBy = new Map(post.map(r => [r._key, r]));
+  const pairs = pre.filter(r => r._session !== '__unassigned' && postBy.has(r._key)).map(r => ({ name: r['姓名'], id: r['身分'] || postBy.get(r._key)['身分'], pre: r, post: postBy.get(r._key) }));
   const skills = c.skills.map(s => {
     const diffs = pairs.map(p => { const a = conf(p.pre, s), b = conf(p.post, s); return a != null && b != null ? b - a : null; }).filter(x => x != null);
     return { s, pre: mean(pre.map(r => conf(r, s))), post: mean(post.map(r => conf(r, s))), d: mean(diffs), w: wilcoxon(diffs) };
@@ -417,7 +426,7 @@ function render() {
   $('#fSes').hidden = $('#fSesL').hidden = !course;
   if (course) {
     const sess = courseData(course, false).sessions;
-    $('#fSes').innerHTML = '<option value="">全部場次</option>' + sess.map(s => `<option value="${s}" ${s === state.ses ? 'selected' : ''}>${s}</option>`).join('');
+    $('#fSes').innerHTML = '<option value="">全部場次</option>' + sess.map(s => `<option value="${esc(s.id)}" ${s.id === state.ses ? 'selected' : ''}>${esc(s.label)}</option>`).join('');
   }
   $('#view').innerHTML = course ? viewCourse(course) : viewOverview();
   bindTips();
@@ -426,6 +435,15 @@ function render() {
 // ---------- overview ----------
 function viewOverview() {
   const D = COURSES.map(c => courseData(c));
+  const registry = CourseSessions.read(RAW[CourseSessions.SHEET] || []);
+  const opening = card('開課場次與學員人數', '依 Sheet「課程清單」統計；學員人次為已開課場次的學員人數加總，同一人參加兩場計兩人次。此區不隨問卷身分篩選改變。', `
+    <div class="tw"><table id="courseOpening"><thead><tr><th>模擬課程</th><th class="n">已開辦場次</th><th class="n">學員人次</th><th class="n">預定場次</th></tr></thead><tbody>
+    ${COURSES.map(c => { const s = CourseSessions.stats(registry.sessions.filter(x => x.course === c.id)); return `<tr><td><b>${c.short}</b></td><td class="n">${s.held} 場</td><td class="n">${s.missing ? `${s.students} 人次（${s.missing} 場待填）` : `${s.students} 人次`}</td><td class="n">${s.planned} 場</td></tr>`; }).join('')}
+    </tbody></table></div>
+    ${registry.sessions.length ? `<details style="margin-top:16px"><summary>查看場次清單與填答連結</summary><div class="tw"><table><thead><tr><th>課程</th><th>場次</th><th>狀態</th><th class="n">學員人數</th><th>填答連結</th></tr></thead><tbody>${registry.sessions.map(s => `<tr><td>${COURSES.find(c => c.id === s.course).short}</td><td>${esc(CourseSessions.label(s))}</td><td>${s.status}</td><td class="n">${s.count ?? '待填'}</td><td>${s.open && s.status !== '取消' ? ['pretest', 'posttest'].map((page, i) => `<a target="_blank" rel="noopener" href="https://luyun1224.github.io/cmh4230Leture/${page}.html?course=${s.course}&amp;session=${encodeURIComponent(s.id)}">${i === 0 ? '前測' : '後測'}</a>`).join(' ／ ') : '未開放'}</td></tr>`).join('')}</tbody></table></div></details>` : ''}
+    ${!registry.sessions.length ? '<p class="note">尚無有效課程清單，請在 Sheet 新增各課程的上課場次；不會以問卷填答日期推算場次。</p>' : ''}
+    ${registry.issues.length ? `<p class="note" role="alert">課程清單需要修正：${registry.issues.map(esc).join('；')}</p>` : ''}
+    ${D.some(d => [...d.pre, ...d.post].some(r => r._session === '__unassigned')) ? '<p class="note">部分問卷尚未指定場次，仍保留於份數與分布統計，但不參與前後測配對；請於原問卷工作表補填「場次ID」。</p>' : ''}`);
   const totPre = D.reduce((s, d) => s + d.pre.length, 0), totPost = D.reduce((s, d) => s + d.post.length, 0), totPair = D.reduce((s, d) => s + d.pairs.length, 0);
   const allDiff = D.flatMap(d => d.pairs.map(p => { const a = d.confMean(p.pre), b = d.confMean(p.post); return a != null && b != null ? b - a : null; })).filter(x => x != null);
   const allOverall = D.flatMap(d => d.overallArr);
@@ -438,7 +456,7 @@ function viewOverview() {
     ${kpi('前測份數', totPre, '四門課合計')}
     ${kpi('後測份數', totPost, '四門課合計')}
     ${kpi('前後測都完成', totPair, '後測回收 ' + pct(totPair, totPre))}
-    ${kpi('平均信心提升', allDiff.length ? fd(mean(allDiff)) : '—', '同一人前後差，5 分量表', allDiff.length ? (mean(allDiff) > 0 ? 'up' : 'down') : '')}
+    ${kpi('平均信心提升', allDiff.length ? fd(mean(allDiff)) : '—', '同一人、同一場次前後差，5 分量表', allDiff.length ? (mean(allDiff) > 0 ? 'up' : 'down') : '')}
     ${kpi('平均整體滿意度', allOverall.length ? f1(mean(allOverall)) + '<small> / 5</small>' : '—', allOverall.length + ' 份後測')}
     ${kpi('推薦同意率', (() => { const a = D.flatMap(d => d.sat[4]); return a.length ? pct(a.filter(x => x >= 4).length, a.length) : '—'; })(), '「會推薦其他學員」勾 4–5 分')}
   </div>`;
@@ -448,6 +466,7 @@ function viewOverview() {
       <div class="cc-head"><span class="cc-no">${String(COURSES.indexOf(d.c) + 1).padStart(2, '0')}</span><h3>${d.c.name}</h3></div>
       <div class="badges">${d === bestGain ? '<span class="badge g">學習成效最佳</span>' : ''}${d === bestSat ? '<span class="badge">學員最滿意</span>' : ''}</div>
       <dl>
+        ${(() => { const s = CourseSessions.stats(registeredSessions(d.c)); return `<dt>已開辦場次</dt><dd>${s.held} 場</dd><dt>學員人次</dt><dd>${s.students} 人次${s.missing ? '（待補人數）' : ''}</dd><dt>預定場次</dt><dd>${s.planned} 場</dd>`; })()}
         <dt>前測／後測</dt><dd>${d.pre.length}／${d.post.length} 份</dd>
         <dt>技能信心</dt><dd>${f1(d.confPre)} → ${f1(d.confPost)}</dd>
         <dt>同一人提升</dt><dd class="${d.confD > 0 ? 'up' : ''}">${fd(d.confD)}</dd>
@@ -510,7 +529,7 @@ function viewOverview() {
       (mn ? (mn.recommend >= .9 ? '各課程的推薦同意率都在九成以上，學員願意推薦給其他人。' : `推薦同意率最低的是${q(mn.c.short)}（${Math.round(mn.recommend * 100)}%）。`) : '');
   }
   setTimeout(() => document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go)));
-  return `<div class="grid">${kpis}${cards}<div class="grid g2">${addI(dumb, iDumb)}${addI(satCmp, iSat)}</div>${addI(heat, iHeat)}${addI(pr, iPr)}</div>`;
+  return `<div class="grid">${opening}${kpis}${cards}<div class="grid g2">${addI(dumb, iDumb)}${addI(satCmp, iSat)}</div>${addI(heat, iHeat)}${addI(pr, iPr)}</div>`;
 }
 
 // ---------- course page ----------
@@ -556,15 +575,15 @@ function viewCourse(c) {
 
   // 填答追蹤
   const names = new Map();
-  d.pre.forEach(r => names.set(r._name, { name: r['姓名'], id: r['身分'], pre: r }));
-  d.post.forEach(r => { const o = names.get(r._name) || { name: r['姓名'], id: r['身分'] }; o.post = r; names.set(r._name, o); });
+  d.pre.forEach(r => names.set(r._key, { name: r['姓名'], id: r['身分'], session: r._sessionLabel, pre: r }));
+  d.post.forEach(r => { const key = r._session === '__unassigned' ? r._key + ':post' : r._key; const o = names.get(key) || { name: r['姓名'], id: r['身分'], session: r._sessionLabel }; o.post = r; names.set(key, o); });
   const people = [...names.values()].sort((a, b) => (!!a.post - !!b.post) || (!!a.pre - !!b.pre) || String(a.name).localeCompare(b.name, 'zh-Hant'));
   const missing = people.filter(p => !p.pre || !p.post).length;
   const track = card('填答追蹤與個人變化', missing ? `有 ${missing} 人前後測尚未都完成，已排在最上方。` : '所有人前後測都已完成。',
-    `<div class="tw"><table><thead><tr><th>姓名</th><th>身分</th><th>前測</th><th>後測</th><th class="n">前測信心</th><th class="n">後測信心</th><th class="n">提升</th></tr></thead><tbody>
+    `<div class="tw"><table><thead><tr><th>姓名</th><th>身分</th><th>上課場次</th><th>前測</th><th>後測</th><th class="n">前測信心</th><th class="n">後測信心</th><th class="n">提升</th></tr></thead><tbody>
     ${people.map(p => { const a = p.pre ? d.confMean(p.pre) : null, b = p.post ? d.confMean(p.post) : null; const df = a != null && b != null ? b - a : null;
-      return `<tr><td>${esc(p.name)}</td><td>${esc(p.id || '')}</td><td>${p.pre ? '<span class="flag ok">已填</span>' : '<span class="flag miss">未填</span>'}</td><td>${p.post ? '<span class="flag ok">已填</span>' : '<span class="flag miss">未填</span>'}</td><td class="n">${f1(a)}</td><td class="n">${f1(b)}</td><td class="n ${df > 0 ? 'up' : df < 0 ? 'down' : ''}">${fd(df)}</td></tr>`; }).join('')}
-    </tbody></table></div><div class="note">信心為該學員所有技能題的平均。同一人重複填答時，以最後一次為準。</div>`);
+      return `<tr><td>${esc(p.name)}</td><td>${esc(p.id || '')}</td><td>${esc(p.session)}</td><td>${p.pre ? '<span class="flag ok">已填</span>' : '<span class="flag miss">未填</span>'}</td><td>${p.post ? '<span class="flag ok">已填</span>' : '<span class="flag miss">未填</span>'}</td><td class="n">${f1(a)}</td><td class="n">${f1(b)}</td><td class="n ${df > 0 ? 'up' : df < 0 ? 'down' : ''}">${fd(df)}</td></tr>`; }).join('')}
+    </tbody></table></div><div class="note">信心為該學員所有技能題的平均。同一人、同一場次、同一前／後測重複填答時，以最後一次為準。未指定場次的問卷分開顯示，不計算配對提升。</div>`);
 
   const fbList = (key, src = d.post) => { const items = src.filter(r => String(r[key] || '').trim()); return items.length ? `<div class="fb">${items.map(r => `<div class="fb-item">${esc(r[key])}<small>${esc(r['身分'] || '')}｜${dayKey(r._d)}</small></div>`).join('')}</div>` : '<p class="empty">尚無回饋</p>'; };
   const fb = `<div class="grid g2">${card('最有幫助的內容', '後測簡答，依身分與日期顯示，不列姓名', fbList('最有幫助的內容'))}${card('回饋與建議', '學員想開的課程與想說的話', fbList('回饋與建議'))}</div>`;
@@ -779,7 +798,7 @@ function demoData() {
   const pickW = (arr, w) => { let r = rnd() * w.reduce((a, b) => a + b, 0); for (let i = 0; i < arr.length; i++) { r -= w[i]; if (r <= 0) return arr[i]; } return arr[arr.length - 1]; };
   const clamp = v => Math.max(1, Math.min(5, Math.round(v)));
   const sur = '王林陳張李黃吳劉蔡楊許鄭謝郭洪邱曾廖賴周'.split(''), giv = ['冠宇', '怡君', '家豪', '雅婷', '承恩', '宜蓁', '柏翰', '佳穎', '彥廷', '詩涵', '俊傑', '心怡', '宗翰', '思妤', '品睿', '郁婷'];
-  const out = {};
+  const out = { [CourseSessions.SHEET]: [] };
   const plan = [
     { c: 'echo', ses: ['2026-10-14', '2026-11-11'], n: [6, 5], gain: 1.4, sat: 4.5, base: 1.9 },
     { c: 'endo', ses: ['2026-10-20'], n: [6], gain: 1.1, sat: 4.2, base: 1.5 },
@@ -792,15 +811,17 @@ function demoData() {
     const c = COURSES.find(x => x.id === p.c);
     const pre = [], post = [];
     p.ses.forEach((day, si) => {
+      const sessionID = `${c.id}-${day}-${si + 1}`;
+      out[CourseSessions.SHEET].push({ '場次ID': sessionID, '課程': c.short, '上課日期': day, '開始時間': '13:00', '學員人數': p.n[si], '狀態': '已開課', '開放填答': '是' });
       for (let i = 0; i < p.n[si]; i++) {
         const name = '示範' + sur[Math.floor(rnd() * sur.length)] + giv[Math.floor(rnd() * giv.length)];
         const id = c.id === 'lap' ? pickW(IDS, [0, 9, 1, 0]) : pickW(IDS, [1, 1, 8, 1]);
         const t = (h, m) => `${day.replace(/-/g, '/')} ${h}:${String(m).padStart(2, '0')}:00`;
         const ability = rnd() * 1.2 - .6;
-        const r1 = { '時間戳記': t(13, Math.floor(rnd() * 10)), '問卷': '前測', '課程': c.name, '姓名': name, '身分': id,
+        const r1 = { '時間戳記': t(13, Math.floor(rnd() * 10)), '問卷': '前測', '課程': c.name, '場次ID': sessionID, '上課日期': day, '姓名': name, '身分': id,
           '操作次數': pickW(EXP, [5, 3, 1, .3]), '曾參加相關課程': pickW(['是', '否'], [1, 3]),
           '臨床準備度': String(clamp(p.base + ability + rnd() * .8)) };
-        const r2 = { '時間戳記': t(15, 10 + Math.floor(rnd() * 20)), '問卷': '後測', '課程': c.name, '姓名': name, '身分': id,
+        const r2 = { '時間戳記': t(15, 10 + Math.floor(rnd() * 20)), '問卷': '後測', '課程': c.name, '場次ID': sessionID, '上課日期': day, '姓名': name, '身分': id,
           '臨床準備度': String(clamp(p.base + ability + p.gain + rnd() * .8 - .2)) };
         c.skills.forEach((s, k) => {
           const diff = (k % 3) * .25;
