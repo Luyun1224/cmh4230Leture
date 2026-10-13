@@ -67,6 +67,24 @@ select{font:inherit;font-size:14px;font-weight:700;border:2.5px solid var(--ink)
 .grid{display:grid;gap:22px}
 .g2{grid-template-columns:repeat(2,minmax(0,1fr))}
 @media (max-width:860px){.g2{grid-template-columns:1fr}}
+.topic-group{display:flex;flex-direction:column;gap:16px}
+.topic-heading{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:8px;border-bottom:3px solid var(--ink);padding-bottom:8px}
+.topic-heading h2{margin:0;font-size:24px;font-weight:900}
+.topic-heading p{margin:0;color:var(--ink-2);font-size:13px}
+.topic-cards{grid-template-columns:repeat(3,minmax(0,1fr));align-items:start}
+.topic-cards .card h2{font-size:20px}
+.topic-cards .sec{display:block;margin-top:12px}
+.topic-cards .bar-row{grid-template-columns:minmax(0,8em) 1fr 3.4em}
+.topic-cards .importance-row{grid-template-columns:minmax(0,6em) 1fr 7.5em;font-size:12px}
+.topic-cards .insight{flex-direction:column}
+.topic-cards .insight p{font-size:13px}
+.mirror-row{display:grid;grid-template-columns:minmax(0,6em) 1fr 1fr;align-items:center;gap:8px;margin:10px 0;font-size:13px}
+.mirror-side{display:flex;align-items:center;gap:5px;min-width:0}
+.mirror-side .bar-track{flex:1;height:16px}
+.mirror-side:first-of-type .bar-track{display:flex;justify-content:flex-end}
+.mirror-value{font-weight:900;font-variant-numeric:tabular-nums}
+@media (max-width:1100px){.topic-cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:700px){.topic-cards{grid-template-columns:1fr}}
 
 .kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px}
 @media (max-width:980px){.kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
@@ -536,21 +554,6 @@ function viewCourse(c) {
     `<div class="sec">最希望學到</div>` + bars(countMulti(d.pre.map(r => r['最希望學到'])), d.pre.length, true) +
     `<div class="sec">最擔心</div>` + bars(countMulti(d.pre.map(r => r['最擔心'])), d.pre.length, true));
 
-  let career = '', lapExp = '';
-  if (c.career) {
-    career = card('外科職涯意向', '腹腔鏡課程專屬題組',
-      `<div class="sec">未來走外科系的意願（前測 → 後測）</div>` + distCompare(['1', '2', '3', '4', '5'], d.pre.map(r => String(num(r['外科意願']))), d.post.map(r => String(num(r['外科意願'])))) +
-      `<div class="note" style="margin-top:4px">1 完全不考慮、2 不太可能、3 不確定、4 可能會、5 幾乎確定</div>` +
-      `<div class="sec">課前：最可能選擇的專科方向</div>` + bars(count(d.pre.map(r => r['專科方向'])), d.pre.length, true) +
-      `<div class="sec">課後：這堂課對走外科意願的影響</div>` + bars(count(d.post.map(r => r['對外科意願的影響']), ['明顯提高', '稍微提高', '沒有影響', '稍微降低', '明顯降低']), d.post.length));
-    const PARTS = ['器械介紹', '夾豆子', '繞圈圈', '縫合', '3D 模擬機'];
-    lapExp = card('關卡與 3D 模擬機', '腹腔鏡課程專屬題組（後測）',
-      `<div class="sec">最有幫助 vs 最困難的部分</div>` + partsCompare(PARTS, d.post.map(r => r['最有幫助的部分']), d.post.map(r => r['最困難的部分'])) +
-      `<div class="sec">和 2D 模擬箱相比，3D 模擬機對深度判斷精準度的影響</div>` + bars(count(d.post.map(r => r['3D對深度判斷的影響']), ['明顯提高', '稍微提高', '沒有影響', '稍微降低', '明顯降低']), d.post.length) +
-      `<div class="sec">未來自主練習想用</div>` + bars(count(d.post.map(r => r['自主練習偏好']), ['腹腔鏡模擬箱', '3D 模擬機', '兩者都想', '不會想再練']), d.post.length) +
-      `<div class="sec">課前：腹腔鏡基本技能對未來工作的重要性</div>` + importanceDistribution(d.pre.map(r => r['技能重要性'])));
-  }
-
   // 填答追蹤
   const names = new Map();
   d.pre.forEach(r => names.set(r._name, { name: r['姓名'], id: r['身分'], pre: r }));
@@ -601,21 +604,6 @@ function viewCourse(c) {
     iExp = (t.length ? `學員最想學的是${q(t[0][0])}（${t[0][1]} 人）` + (t[1] ? `，其次是${q(t[1][0])}` : '') + '。' : '') +
       (w.length ? `最常見的擔心是${q(w[0][0])}（${w[0][1]} 人），可提供給講師在課程中優先回應。` : '');
   }
-  let iCar = '';
-  if (c.career && d.pre.length) {
-    const will = d.pre.filter(r => (num(r['外科意願']) || 0) >= 4).length;
-    const upN = d.post.filter(r => /提高/.test(r['對外科意願的影響'] || '')).length;
-    const willPost = d.post.filter(r => (num(r['外科意願']) || 0) >= 4).length;
-    iCar = `課前有 ${pct(will, d.pre.length)} 的學員可能或幾乎確定走外科系` + (d.post.length ? `，課後為 ${pct(willPost, d.post.length)}。另有 ${pct(upN, d.post.length)} 表示這堂課提高了走外科的意願${upN / d.post.length >= .5 ? '，課程對外科招募有正面幫助' : ''}。` : '。');
-  }
-  let iLap = '';
-  if (c.career && d.post.length) {
-    const h = count(d.post.map(r => r['最有幫助的部分'])), hd = count(d.post.map(r => r['最困難的部分']));
-    const d3 = d.post.filter(r => /提高/.test(r['3D對深度判斷的影響'] || '')).length;
-    const want = d.post.filter(r => r['自主練習偏好'] && r['自主練習偏好'] !== '不會想再練').length;
-    iLap = (h.length ? `學員覺得最有幫助的是${q(h[0][0])}（${h[0][1]} 人）` : '') + (hd.length ? `，最困難的是${q(hd[0][0])}（${hd[0][1]} 人），可考慮在這一關多安排示範或練習時間。` : '。') +
-      `${pct(d3, d.post.length)} 認為 3D 模擬機提高了深度判斷的精準度；${pct(want, d.post.length)} 的學員未來還想自主練習${want / d.post.length >= .7 ? '，可考慮開放練習時段' : ''}。`;
-  }
   const pD = people.map(p => p.pre && p.post ? d.confMean(p.post) - d.confMean(p.pre) : null).filter(x => x != null);
   const missNames = people.filter(p => !p.pre || !p.post).map(p => p.name);
   let iTrack = `前後測都完成的有 ${d.pairs.length} 人。` + (missNames.length ? `尚未完成的有 ${missNames.length} 人：${missNames.slice(0, 6).map(esc).join('、')}${missNames.length > 6 ? ' 等' : ''}，可提醒補填。` : '所有學員都已完成。') +
@@ -625,10 +613,61 @@ function viewCourse(c) {
   const fbCards = `<div class="grid g2">${c.career
     ? addI(card('課前想讓老師知道的', '前測選填，依身分與日期顯示，不列姓名', fbList(helpKey, helpSrc)), nHelp ? `共 ${nHelp} 位學員在課前留言，可在上課前轉給講師參考。` : '')
     : addI(card('最有幫助的內容', '後測簡答，依身分與日期顯示，不列姓名', fbList(helpKey, helpSrc)), nHelp ? `共收到 ${nHelp} 則回饋，可從中找出學員最有感的教學方式，作為課程的固定亮點。` : '')}${addI(card('回饋與建議', '學員想開的課程與想說的話', fbList('回饋與建議')), nFb ? `共 ${nFb} 位學員留言（${pct(nFb, d.post.length)}），其中提到的新課程需求可作為中心下一步開課的參考。` : '')}</div>`;
-  return `<div class="grid">${kpis}${addI(skillChart, iSkill)}<div class="grid g2">${addI(satCard, iSat2)}${addI(readyCard, iReady)}</div><div class="grid g2">${addI(bg, iBg)}${addI(expect, iExp)}</div>${c.career ? `<div class="grid g2">${addI(career, iCar)}${addI(lapExp, iLap)}</div>` : ''}${addI(track, iTrack)}${fbCards}</div>`;
+  return `<div class="grid">${kpis}${addI(skillChart, iSkill)}<div class="grid g2">${addI(satCard, iSat2)}${addI(readyCard, iReady)}</div><div class="grid g2">${addI(bg, iBg)}${addI(expect, iExp)}</div>${c.career ? lapTopics(d) : ''}${addI(track, iTrack)}${fbCards}</div>`;
 }
 
 // ---------- components ----------
+function lapTopics(d) {
+  const group = (title, subtitle, cards) => `<section class="topic-group"><div class="topic-heading"><h2>${title}</h2><p>${subtitle}</p></div><div class="grid topic-cards">${cards.join('')}</div></section>`;
+  const chartCard = (title, subtitle, body, insight) => addI(card(title, subtitle, body), insight);
+  const preWill = validScores(d.pre.map(r => r['外科意願'])), postWill = validScores(d.post.map(r => r['外科意願']));
+  const responses = (rows, key) => rows.map(r => String(r[key] ?? '').trim()).filter(v => v && v !== 'null');
+  const topLabels = values => {
+    const entries = count(values);
+    if (!entries.length) return null;
+    const n = entries[0][1];
+    return {label: entries.filter(e => e[1] === n).map(e => q(e[0])).join('、'), n};
+  };
+  const tendency = responses(d.pre, '專科方向'), influence = responses(d.post, '對外科意願的影響');
+  const leading = topLabels(tendency), up = influence.filter(v => /提高/.test(v)).length;
+  const impactOptions = ['明顯提高', '稍微提高', '沒有影響', '稍微降低', '明顯降低'];
+  const career = group('職涯方向與課程影響', `前測 ${d.pre.length} 份｜後測 ${d.post.length} 份；各圖依有效作答統計`, [
+    chartCard('1 職涯意向變化', `走外科系的意願｜前測 ${preWill.length} 人、後測 ${postWill.length} 人`,
+      `<div class="lk-key"><span><i style="background:var(--pre)"></i>前測</span><span><i style="background:var(--post)"></i>後測</span></div>` +
+      distCompare(['1', '2', '3', '4', '5'], preWill.map(String), postWill.map(String)) +
+      '<div class="note">右側上排為前測人數、下排為後測人數。1 完全不考慮、2 不太可能、3 不確定、4 可能會、5 幾乎確定。</div>',
+      preWill.length || postWill.length ? `選擇 4～5 分的比例：課前 ${pct(preWill.filter(v => v >= 4).length, preWill.length)}，課後 ${pct(postWill.filter(v => v >= 4).length, postWill.length)}。此圖為全體分布，並非同一人配對的變化。` : '尚無有效的職涯意願作答。'),
+    chartCard('2 課前專科傾向', `前測有效作答 ${tendency.length} 人`, bars(count(tendency), tendency.length, true),
+      leading ? `最多學員選擇 ${leading.label}（${leading.n} 人，${pct(leading.n, tendency.length)}）。` : '尚無專科方向作答。'),
+    chartCard('3 課程對外科意願的影響', `後測有效作答 ${influence.length} 人`, bars(count(influence, impactOptions), influence.length),
+      influence.length ? `${up} 人（${pct(up, influence.length)}）表示課程提高了走外科的意願。這是學員的課後自評。` : '尚無課後影響作答。')
+  ]);
+  const parts = ['器械介紹', '夾豆子', '繞圈圈', '縫合', '3D 模擬機'];
+  const help = responses(d.post, '最有幫助的部分'), hard = responses(d.post, '最困難的部分');
+  const best = topLabels(help), hardest = topLabels(hard);
+  const depth = responses(d.post, '3D對深度判斷的影響'), preference = responses(d.post, '自主練習偏好');
+  const improved = depth.filter(v => /提高/.test(v)).length, preferred = topLabels(preference);
+  const importance = validScores(d.pre.map(r => r['技能重要性']));
+  const learning = group('實作體驗與技能價值', '關卡回饋、3D 模擬機與課前重要性認知', [
+    chartCard('4 哪些內容最有幫助／最困難？', `後測｜最有幫助 ${help.length} 人、最困難 ${hard.length} 人`, mirrorParts(parts, help, hard),
+      [best ? `最有幫助：${best.label}（各 ${best.n} 人）。` : '', hardest ? `最困難：${hardest.label}（各 ${hardest.n} 人），可作為示範與分段練習的優先項目。` : ''].join('') || '尚無關卡回饋。'),
+    chartCard('5 3D 模擬機的學習價值', '深度判斷與未來練習偏好集中呈現',
+      `<div class="sec">A. 相較 2D，對深度判斷的影響</div><p class="note">有效作答 ${depth.length} 人</p>` + bars(count(depth, impactOptions), depth.length) +
+      `<div class="sec">B. 未來自主練習想用</div><p class="note">有效作答 ${preference.length} 人</p>` + bars(count(preference, ['腹腔鏡模擬箱', '3D 模擬機', '兩者都想', '不會想再練']), preference.length),
+      (depth.length ? `${improved} 人（${pct(improved, depth.length)}）自評 3D 模擬機提高深度判斷精準度。` : '尚無深度判斷作答。') + (preferred ? `練習偏好以 ${preferred.label} 為最多（各 ${preferred.n} 人）。` : '')),
+    chartCard('6 課前重要性認知', '腹腔鏡基本技能對未來工作的重要性', importanceDistribution(d.pre.map(r => r['技能重要性'])),
+      importance.length ? `課前平均 ${f1(mean(importance))}／5 分；${pct(importance.filter(v => v >= 4).length, importance.length)} 的學員給予 4～5 分。` : '尚無有效的重要性作答。')
+  ]);
+  return career + learning;
+}
+function mirrorParts(labels, help, hard) {
+  if (!help.length && !hard.length) return '<p class="empty">尚無關卡回饋</p>';
+  const a = count(help, labels), b = count(hard, labels);
+  const max = Math.max(1, ...a.map(e => e[1]), ...b.map(e => e[1]));
+  return `<div class="lk-key"><span><i style="background:var(--post)"></i>左：最有幫助（人）</span><span><i style="background:var(--pre)"></i>右：最困難（人）</span></div>` + labels.map((label, i) =>
+    `<div class="mirror-row"><span>${esc(label)}</span><div class="mirror-side"><span class="mirror-value">${a[i][1]}</span><div class="bar-track"><div class="bar-fill" style="width:${a[i][1] / max * 100}%;background:var(--post)"></div></div></div><div class="mirror-side"><div class="bar-track"><div class="bar-fill" style="width:${b[i][1] / max * 100}%;background:var(--pre)"></div></div><span class="mirror-value">${b[i][1]}</span></div></div>`
+  ).join('');
+}
 function kpi(label, val, sub, cls = '') { return `<div class="kpi"><span>${label}</span><b class="${cls}">${val}</b>${sub ? `<em>${sub}</em>` : ''}</div>`; }
 function addI(html, text) { return text ? html.replace(/<\/section>$/, `<div class="insight"><b>分析</b><p>${text}</p></div></section>`) : html; }
 const topBy = (arr, f) => arr.reduce((a, b) => (f(b) > f(a) ? b : a));
@@ -646,20 +685,23 @@ function bars(entries, total, wide) {
   const max = Math.max(...entries.map(e => e[1]), 1);
   return `<div class="bars">${entries.map(([k, v]) => `<div class="bar-row" ${wide ? 'style="grid-template-columns:minmax(0,16em) 1fr 3.4em"' : ''}><span class="t">${esc(k)}</span><div class="bar-track"><div class="bar-fill" style="width:${v / max * 100}%"></div></div><span class="v">${v}<small style="font-weight:500;color:var(--muted)"> 人</small></span></div>`).join('')}</div>`;
 }
-function importanceDistribution(values) {
-  const scores = values.map(v => {
+function validScores(values) {
+  return values.map(v => {
     if (typeof v === 'number') return v;
     const m = String(v ?? '').trim().match(/^([1-5])(?:\.0+)?(?:\s.*)?$/);
     return m ? +m[1] : null;
   }).filter(v => Number.isInteger(v) && v >= 1 && v <= 5);
+}
+function importanceDistribution(values) {
+  const scores = validScores(values);
   if (!scores.length) return '<p class="empty">尚無有效作答</p>';
-  const labels = ['1 分（完全不重要）', '2 分', '3 分', '4 分', '5 分（非常重要）'];
+  const labels = ['1 分', '2 分', '3 分', '4 分', '5 分'];
   const n = scores.length;
   const rows = labels.map((label, i) => {
     const count = scores.filter(v => v === i + 1).length;
     return `<div class="bar-row importance-row"><span class="t">${label}</span><div class="bar-track"><div class="bar-fill" style="width:${count / n * 100}%"></div></div><span class="v">${count} 人（${pct(count, n)}）</span></div>`;
   }).join('');
-  return `<p class="note">1～5 分，分數越高代表越重要。有效作答 ${n} 人；長條與百分比以有效作答人數為分母。${values.length > n ? `另有 ${values.length - n} 筆未填或無效作答未納入。` : ''}</p><div class="bars">${rows}</div>`;
+  return `<p class="note">1 分＝完全不重要；5 分＝非常重要。有效作答 ${n} 人；長條與百分比以有效作答人數為分母。${values.length > n ? `另有 ${values.length - n} 筆未填或無效作答未納入。` : ''}</p><div class="bars">${rows}</div>`;
 }
 function distCompare(cats, a, b) {
   const ca = count(a, cats), cb = count(b, cats);
