@@ -124,7 +124,9 @@ svg text{font-family:var(--f)}
 .bar-track{height:14px;background:var(--grid);border-radius:999px;overflow:hidden;border:2px solid var(--ink)}
 .bar-fill{height:100%;background:var(--ink-2);border-radius:999px}
 .bar-row .v{text-align:right;font-weight:900;color:var(--ink);font-variant-numeric:tabular-nums}
+.importance-row{grid-template-columns:minmax(0,10em) 1fr 7.5em}
 @media (max-width:520px){.bar-row{grid-template-columns:minmax(0,8em) 1fr 3em}}
+@media (max-width:520px){.importance-row{grid-template-columns:minmax(0,6em) 1fr 7.5em;font-size:12px}}
 .sec{display:inline-block;font-weight:900;font-size:14px;margin:16px 0 8px;border-bottom:3px solid var(--ground)}
 .sec:first-child{margin-top:0}
 
@@ -546,7 +548,7 @@ function viewCourse(c) {
       `<div class="sec">最有幫助 vs 最困難的部分</div>` + partsCompare(PARTS, d.post.map(r => r['最有幫助的部分']), d.post.map(r => r['最困難的部分'])) +
       `<div class="sec">和 2D 模擬箱相比，3D 模擬機對深度判斷精準度的影響</div>` + bars(count(d.post.map(r => r['3D對深度判斷的影響']), ['明顯提高', '稍微提高', '沒有影響', '稍微降低', '明顯降低']), d.post.length) +
       `<div class="sec">未來自主練習想用</div>` + bars(count(d.post.map(r => r['自主練習偏好']), ['腹腔鏡模擬箱', '3D 模擬機', '兩者都想', '不會想再練']), d.post.length) +
-      `<div class="sec">課前：腹腔鏡基本技能對未來工作的重要性</div>` + bars(count(d.pre.map(r => r['技能重要性']), ['1 完全不重要', '2', '3', '4', '5 非常重要']), d.pre.length));
+      `<div class="sec">課前：腹腔鏡基本技能對未來工作的重要性</div>` + importanceDistribution(d.pre.map(r => r['技能重要性'])));
   }
 
   // 填答追蹤
@@ -643,6 +645,21 @@ function bars(entries, total, wide) {
   if (!entries.length || !total) return '<p class="empty">尚無資料</p>';
   const max = Math.max(...entries.map(e => e[1]), 1);
   return `<div class="bars">${entries.map(([k, v]) => `<div class="bar-row" ${wide ? 'style="grid-template-columns:minmax(0,16em) 1fr 3.4em"' : ''}><span class="t">${esc(k)}</span><div class="bar-track"><div class="bar-fill" style="width:${v / max * 100}%"></div></div><span class="v">${v}<small style="font-weight:500;color:var(--muted)"> 人</small></span></div>`).join('')}</div>`;
+}
+function importanceDistribution(values) {
+  const scores = values.map(v => {
+    if (typeof v === 'number') return v;
+    const m = String(v ?? '').trim().match(/^([1-5])(?:\.0+)?(?:\s.*)?$/);
+    return m ? +m[1] : null;
+  }).filter(v => Number.isInteger(v) && v >= 1 && v <= 5);
+  if (!scores.length) return '<p class="empty">尚無有效作答</p>';
+  const labels = ['1 分（完全不重要）', '2 分', '3 分', '4 分', '5 分（非常重要）'];
+  const n = scores.length;
+  const rows = labels.map((label, i) => {
+    const count = scores.filter(v => v === i + 1).length;
+    return `<div class="bar-row importance-row"><span class="t">${label}</span><div class="bar-track"><div class="bar-fill" style="width:${count / n * 100}%"></div></div><span class="v">${count} 人（${pct(count, n)}）</span></div>`;
+  }).join('');
+  return `<p class="note">1～5 分，分數越高代表越重要。有效作答 ${n} 人；長條與百分比以有效作答人數為分母。${values.length > n ? `另有 ${values.length - n} 筆未填或無效作答未納入。` : ''}</p><div class="bars">${rows}</div>`;
 }
 function distCompare(cats, a, b) {
   const ca = count(a, cats), cb = count(b, cats);
