@@ -30,12 +30,17 @@ test('only explicit class dates or IDs resolve a session, never the answer times
 });
 
 class Sheet {
-  constructor(name, values = []) { this.name = name; this.values = values; this.formulas = new Map(); }
+  constructor(name, values = []) { this.name = name; this.values = values; this.formulas = new Map(); this.maxRows = 1000; this.maxColumns = 26; }
   getName() { return this.name; }
   getLastColumn() { return Math.max(0, ...this.values.map(r => r.length)); }
   getLastRow() { return this.values.length; }
+  getMaxRows() { return this.maxRows; }
+  getMaxColumns() { return this.maxColumns; }
+  insertRowsAfter(after, count) { assert.equal(after, this.maxRows); this.maxRows += count; return this; }
+  insertColumnsAfter(after, count) { assert.equal(after, this.maxColumns); this.maxColumns += count; return this; }
   getDataRange() { return { getValues: () => this.values.map(r => [...r]) }; }
   getRange(row, column, rows, columns) {
+    if (typeof row === 'number' && (row + rows - 1 > this.maxRows || column + columns - 1 > this.maxColumns)) throw new Error('Requested range exceeds the Sheet grid');
     const target = this;
     const range = {
       getValues: () => Array.from({ length: rows }, (_, n) => Array.from({ length: columns }, (_, m) => target.values[row - 1 + n]?.[column - 1 + m] ?? '')),
@@ -148,6 +153,17 @@ test('management permission upgrade preserves passwords and login history withou
   assert.equal(result.ok, false); assert.equal(result.error, 'admin-auth');
   assert.equal(ctx.doGet({ parameter: { action: 'admin-login-result', requestId: req } }).error, 'admin-auth');
   assert.equal(ctx.checkPassword('test-only'), true);
+});
+test('management permission setup can upgrade a password sheet with fewer than 1000 rows and no spare column', () => {
+  const { context: ctx, sheets } = backend(), sh = sheets.get('密碼管理');
+  sh.maxRows = 3; sh.maxColumns = 5;
+  const before = [...sh.values[1]];
+  ctx.setupCourseAdmin();
+  assert.deepEqual(sh.values[1].slice(0, 5), before);
+  assert.equal(sh.values[0][5], '管理課程（是／否）'); assert.equal(sh.values[1][5], '否');
+  assert.ok(sh.getMaxRows() >= 1000); assert.ok(sh.getMaxColumns() >= 6);
+  sh.values[1][5] = '是'; ctx.setupCourseAdmin();
+  assert.equal(sh.values[1][5], '是'); assert.equal(sh.values[0].filter(v => v === '管理課程（是／否）').length, 1);
 });
 test('administrator login uses a POST password; session cache contains only password hash and metadata', () => {
   const { get, login, cache, context: ctx } = adminEnvironment();

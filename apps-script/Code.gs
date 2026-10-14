@@ -12,6 +12,16 @@ const COURSE_HEADERS = ['場次ID', '課程', '上課日期', '開始時間', '�
 const ADMIN_HEADER = '管理課程（是／否）';
 const ADMIN_SECONDS = 1800;
 
+// 使用 Apps Script 編輯器可解析的語法；保留 0、false 與空字串。
+function valueOrEmpty(value) { return value == null ? '' : value; }
+
+// getRange 不會自動補足已刪除的列／欄，先擴充格線再寫入。
+function ensureSheetSize(sh, rows, columns) {
+  const currentRows = sh.getMaxRows(), currentColumns = sh.getMaxColumns();
+  if (currentRows < rows) sh.insertRowsAfter(currentRows, rows - currentRows);
+  if (currentColumns < columns) sh.insertColumnsAfter(currentColumns, columns - currentColumns);
+}
+
 // 僅接受八張問卷工作表，防止問卷寫入課程清單或密碼管理。
 function doPost(e) {
   const lock = LockService.getScriptLock();
@@ -77,7 +87,7 @@ function doGet(e) {
     const token = String(p.token || '');
     if (!/^[a-f0-9-]{36}$/i.test(token)) return json({ ok: false, error: '收件識別碼格式錯誤' });
     const receipt = CacheService.getScriptCache().get('receipt:' + token);
-    return json(receipt ? { ...JSON.parse(receipt), received: true } : { ok: true, received: false });
+    return json(receipt ? Object.assign({}, JSON.parse(receipt), { received: true }) : { ok: true, received: false });
   }
   // 問卷只需要可公開的場次資訊；不回傳人數、姓名、答案或管理密碼。
   if (p.action === 'sessions') {
@@ -123,7 +133,7 @@ function courseSessions() {
   if (!sh) throw new Error('請先執行 setupCourseSheet 並建立課程清單');
   const rows = sheetRows(sh), counts = {};
   rows.forEach(r => { const id = String(r['場次ID'] || '').trim(); counts[id] = (counts[id] || 0) + 1; });
-  return rows.map(r => ({ ...r, '場次ID': String(r['場次ID'] || '').trim(), '課程': String(r['課程'] || '').trim(),
+  return rows.map(r => Object.assign({}, r, { '場次ID': String(r['場次ID'] || '').trim(), '課程': String(r['課程'] || '').trim(),
     '上課日期': courseDay(r['上課日期']), '開始時間': String(r['開始時間'] || '').trim(),
     '狀態': String(r['狀態'] || '').trim(), '開放填答': String(r['開放填答'] || '').trim() }))
     .filter(r => r['場次ID'] && counts[r['場次ID']] === 1 && COURSE_NAMES.includes(r['課程']) && r['上課日期']
@@ -201,7 +211,7 @@ function requireAdmin(token) {
   const roleColumn = headers.indexOf(ADMIN_HEADER);
   const row = session.row <= sh.getLastRow() ? sh.getRange(session.row, 1, 1, width).getValues()[0] : [];
   if (session.expiresAt <= Date.now() || roleColumn < 0 || !enabled(row[roleColumn])
-    || !(String(row[2] ?? '').trim() === '' || enabled(row[2])) || digest(String(row[0] || '').trim()) !== session.passwordHash) {
+    || !(String(valueOrEmpty(row[2])).trim() === '' || enabled(row[2])) || digest(String(row[0] || '').trim()) !== session.passwordHash) {
     CacheService.getScriptCache().remove('admin-session:' + token);
     adminError('admin-auth', '管理者登入已過期或權限已停用，請重新登入。');
   }
@@ -248,14 +258,14 @@ function adminGet(p) {
     if (p.action === 'admin-login-result') {
       if (!requestID(p.requestId)) adminError('validation', '收件識別碼格式錯誤。');
       const result = cache.get('admin-login:' + p.requestId);
-      return json(result ? { ...JSON.parse(result), received: true } : { ok: true, received: false });
+      return json(result ? Object.assign({}, JSON.parse(result), { received: true }) : { ok: true, received: false });
     }
     requireAdmin(p.adminToken);
     if (p.action === 'admin-catalog') return json({ ok: true, records: adminCatalog(), data: dashboardData() });
     if (p.action === 'admin-receipt') {
       if (!requestID(p.requestId)) adminError('validation', '收件識別碼格式錯誤。');
       const result = cache.get('admin-receipt:' + p.adminToken + ':' + p.requestId);
-      return json(result ? { ...JSON.parse(result), received: true } : { ok: true, received: false });
+      return json(result ? Object.assign({}, JSON.parse(result), { received: true }) : { ok: true, received: false });
     }
     adminError('validation', '不支援的管理操作。');
   } catch (error) { return json({ ok: false, error: error.code || 'server', message: String(error.message || error) }); }
@@ -268,17 +278,17 @@ function courseSheetInfo() {
   if (COURSE_HEADERS.some(h => headers.filter(v => v === h).length !== 1)) adminError('setup', '課程清單欄位不完整或重複，請確認七個標準欄位。');
   return { sh, values, headers };
 }
-function recordVersion(session, row) { return digest(JSON.stringify([row, ...COURSE_HEADERS.map(h => session[h] ?? '')])); }
+function recordVersion(session, row) { return digest(JSON.stringify([row, ...COURSE_HEADERS.map(h => valueOrEmpty(session[h]))])); }
 function adminCatalog() {
   const { values, headers } = courseSheetInfo();
   return values.slice(1).map((row, i) => {
     const session = sheetObject(headers, row);
-    return { row: i + 2, session: Object.fromEntries(COURSE_HEADERS.map(h => [h, session[h] ?? ''])), version: recordVersion(session, i + 2) };
+    return { row: i + 2, session: Object.fromEntries(COURSE_HEADERS.map(h => [h, valueOrEmpty(session[h])])), version: recordVersion(session, i + 2) };
   }).filter(r => COURSE_HEADERS.some(h => r.session[h] !== ''));
 }
 function validCourseSession(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) adminError('validation', '課程資料格式錯誤。');
-  const session = Object.fromEntries(COURSE_HEADERS.map(h => [h, String(input[h] ?? '').trim()]));
+  const session = Object.fromEntries(COURSE_HEADERS.map(h => [h, String(valueOrEmpty(input[h])).trim()]));
   if (!session['場次ID'] || session['場次ID'].length > 80 || /^[=+@-]/.test(session['場次ID']) || /[\x00-\x1f\x7f]/.test(session['場次ID'])) adminError('validation', '請填寫有效的場次ID（最多80字，不可以公式符號開頭）。');
   if (!COURSE_NAMES.includes(session['課程'])) adminError('validation', '請選擇四門模擬課程之一。');
   const day = courseDay(session['上課日期']);
@@ -301,7 +311,7 @@ function saveCourseSession(data) {
     if (!Number.isSafeInteger(row) || row < 2 || row > values.length) adminError('conflict', '場次已移動或移除，請重新載入清單後再編輯。');
     const current = sheetObject(headers, values[row - 1]);
     if (recordVersion(current, row) !== data.version) adminError('conflict', '其他人已修改此場次，請重新載入清單，再按「編輯」確認最新內容。');
-    if (session['場次ID'] !== String(current['場次ID'] ?? '').trim() || session['課程'] !== String(current['課程'] ?? '').trim()) adminError('validation', '既有場次的ID與課程不可更改；請新增場次並將原場次設為取消。');
+    if (session['場次ID'] !== String(valueOrEmpty(current['場次ID'])).trim() || session['課程'] !== String(valueOrEmpty(current['課程'])).trim()) adminError('validation', '既有場次的ID與課程不可更改；請新增場次並將原場次設為取消。');
   } else if (data.mode !== 'create') adminError('validation', '不支援的儲存方式。');
   if (values.slice(1).some((r, i) => i + 2 !== row && String(r[headers.indexOf('場次ID')] || '').trim() === session['場次ID'])) adminError('validation', '場次ID已存在，請使用不同ID。');
   if (row) {
@@ -315,6 +325,7 @@ function setupCourseAdmin() {
   const sh = setupPasswordSheet(), width = sh.getLastColumn();
   const headers = sh.getRange(1, 1, 1, width).getValues()[0];
   let column = headers.indexOf(ADMIN_HEADER) + 1;
+  ensureSheetSize(sh, Math.max(1000, sh.getLastRow()), column || width + 1);
   if (!column) {
     column = width + 1;
     sh.getRange(1, column, 1, 1).setValues([[ADMIN_HEADER]]).setFontWeight('bold').setBackground('#1B1410').setFontColor('#FFD84D');
