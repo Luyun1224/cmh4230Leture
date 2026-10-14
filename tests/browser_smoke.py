@@ -2,9 +2,12 @@
 import functools
 import json
 import threading
+import time
+import copy
 import unittest
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import urlsplit, parse_qs
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -41,6 +44,10 @@ class BrowserChecks(unittest.TestCase):
         self.context = self.browser.new_context()
         self.page = self.context.new_page()
         self.errors = []; self.sent = []; self.reject = False; self.catalog_fail = False
+        self.admin_catalog = copy.deepcopy(CATALOG); self.admin_versions = [0] * len(CATALOG)
+        self.admin_token = 'abcdef01-1234-4234-8234-123456789abc'; self.admin_expired = False
+        self.admin_login_results = {}; self.admin_receipts = {}; self.manager_writes = []; self.read_urls = []
+        self.admin_data = {'課程清單': copy.deepcopy(self.admin_catalog)}
         self.page.on('pageerror', lambda e: self.errors.append(str(e)))
         self.page.route('https://fonts.googleapis.com/**', lambda r: r.abort())
         self.page.route('https://fonts.gstatic.com/**', lambda r: r.abort())
@@ -52,9 +59,26 @@ class BrowserChecks(unittest.TestCase):
 
     def backend(self, route):
         request = route.request
+        params = parse_qs(urlsplit(request.url).query)
+        action = params.get('action', [''])[0]
+        if request.method == 'GET': self.read_urls.append(request.url)
         if request.method == 'POST':
-            self.sent.append(json.loads(request.post_data))
+            payload = json.loads(request.post_data)
+            if payload.get('action', '').startswith('admin-'):
+                self.admin_post(payload)
+                route.fulfill(status=200, content_type='application/json', body='{"ok":true}')
+                return
+            self.sent.append(payload)
             result = {'ok': True}
+        elif action == 'admin-login-result':
+            result = {**self.admin_login_results.get(params['requestId'][0], {'ok': True}), 'received': True}
+        elif action.startswith('admin-'):
+            if self.admin_expired or params.get('adminToken', [''])[0] != self.admin_token:
+                result = {'ok': False, 'error': 'admin-auth', 'message': '管理者登入已過期，請重新登入。'}
+            elif action == 'admin-catalog':
+                result = {'ok': True, 'records': [{'row': i + 2, 'session': s, 'version': f'v{self.admin_versions[i]}'} for i, s in enumerate(self.admin_catalog)], 'data': self.admin_data}
+            else:
+                result = {**self.admin_receipts.get(params['requestId'][0], {'ok': True}), 'received': True}
         elif 'action=receipt' in request.url:
             result = {'ok': not self.reject, 'received': True}
             if self.reject: result['error'] = '場次不存在或未開放填答'
@@ -64,6 +88,29 @@ class BrowserChecks(unittest.TestCase):
             # Public projection intentionally lacks student counts.
             result = {'ok': True, 'sessions': [{k: v for k, v in s.items() if k != '學員人數'} for s in CATALOG]}
         route.fulfill(status=200, content_type='application/json', body=json.dumps(result))
+
+    def admin_post(self, payload):
+        if payload['action'] == 'admin-login':
+            accepted = payload['password'] == 'test-admin'
+            self.admin_login_results[payload['requestId']] = {'ok': True, 'adminToken': self.admin_token, 'expiresAt': int(time.time() * 1000) + 1800000} if accepted else {'ok': False, 'error': 'admin-auth', 'message': '密碼不正確、停用，或尚未開啟課程管理權限。'}
+            if accepted: self.admin_expired = False
+        elif payload['action'] == 'admin-logout':
+            self.admin_expired = True
+        elif payload['action'] == 'admin-save':
+            if self.admin_expired: return
+            identifier = payload['requestId']
+            if self.admin_receipts.get(identifier, {}).get('ok'): return
+            if payload['mode'] == 'update':
+                index = payload['row'] - 2
+                if payload['version'] != f'v{self.admin_versions[index]}':
+                    self.admin_receipts[identifier] = {'ok': False, 'error': 'conflict', 'message': '其他人已修改此場次，請重新載入清單，再按「編輯」確認最新內容。'}
+                    return
+                self.admin_catalog[index] = payload['session']; self.admin_versions[index] += 1
+            else:
+                self.admin_catalog.append(payload['session']); self.admin_versions.append(0)
+            self.manager_writes.append(payload)
+            self.admin_data['課程清單'] = copy.deepcopy(self.admin_catalog)
+            self.admin_receipts[identifier] = {'ok': True}
 
     def fill_answers(self):
         self.page.evaluate('''() => {
@@ -185,6 +232,104 @@ class BrowserChecks(unittest.TestCase):
         self.assertTrue(self.page.evaluate('document.documentElement.scrollWidth <= innerWidth'))
         self.apply_fixture()
         self.assertTrue(self.page.evaluate('document.documentElement.scrollWidth <= innerWidth'))
+
+    def admin_login(self, dashboard=True):
+        if dashboard:
+            self.apply_fixture(); self.admin_data = self.page.evaluate('RAW')
+            self.page.locator('#adminOpen').click()
+        else:
+            self.page.goto(self.base + 'index.html'); self.page.locator('#adminEntry').click()
+        self.page.locator('#adminPassword').fill('test-admin')
+        self.page.locator('#adminLoginSubmit').click()
+        self.page.wait_for_function('document.getElementById("adminMessage").textContent.includes("已登入")')
+
+    def test_admin_login_permissions_and_credentials_stay_out_of_storage_and_get_urls(self):
+        self.page.goto(self.base + 'index.html'); self.page.locator('#adminEntry').click()
+        self.page.locator('#adminPassword').fill('wrong-fixture'); self.page.locator('#adminLoginSubmit').click()
+        self.page.wait_for_function('document.getElementById("adminMessage").textContent.includes("密碼不正確")')
+        self.assertFalse(self.page.locator('#adminWorkspace').is_visible()); self.assertEqual(self.manager_writes, [])
+        self.page.locator('#adminPassword').fill('test-admin'); self.page.locator('#adminLoginSubmit').click()
+        self.page.locator('#adminWorkspace').wait_for(state='visible')
+        self.page.wait_for_function('document.querySelectorAll("#adminRows tr").length===6')
+        self.assertEqual(self.page.locator('#adminPassword').input_value(), '')
+        self.assertEqual(self.page.locator('#adminOpen').inner_text(), '課程管理')
+        self.assertNotIn('test-admin', '\n'.join(self.read_urls))
+        storage = self.page.evaluate('JSON.stringify({local: {...localStorage},session: {...sessionStorage}})')
+        self.assertNotIn('test-admin', storage); self.assertNotIn(self.admin_token, storage)
+
+    def test_admin_can_create_class_and_overview_updates_after_confirmed_save(self):
+        self.admin_login()
+        self.page.locator('#adminCourse').select_option('腹部超音波')
+        self.page.locator('#adminDate').fill('2026-10-20'); self.page.locator('#adminTime').fill('15:30')
+        self.page.locator('#adminStudents').fill('10'); self.page.locator('#adminState').select_option('已開課')
+        identifier = self.page.locator('#adminID').input_value()
+        self.assertRegex(identifier, r'^abd-20261020-[a-f0-9]{8}$')
+        self.page.locator('#adminSave').click()
+        self.page.wait_for_function('document.getElementById("adminMessage").textContent.includes("已儲存")')
+        self.assertEqual(self.manager_writes[-1]['session']['場次ID'], identifier)
+        self.assertEqual(self.manager_writes[-1]['session']['學員人數'], '10')
+        self.assertEqual(self.page.locator('#adminDate').input_value(), '')
+        self.page.locator('#adminClose').click()
+        self.assertEqual(self.page.locator('#courseOpening tbody tr').nth(2).locator('td').all_text_contents(), ['腹部超音波','1 場','10 人次','0 場'])
+
+    def test_admin_can_edit_date_zero_students_and_close_answers_without_changing_identity(self):
+        self.admin_login(); self.page.locator('[data-admin-row="2"]').click()
+        self.assertTrue(self.page.locator('#adminCourse').is_disabled())
+        self.assertTrue(self.page.locator('#adminID').evaluate('(e)=>e.readOnly'))
+        self.page.locator('#adminDate').fill('2026-10-21'); self.page.locator('#adminStudents').fill('0')
+        self.page.locator('#adminAllow').select_option('否'); self.page.locator('#adminSave').click()
+        self.page.wait_for_function('document.getElementById("adminMessage").textContent.includes("已儲存")')
+        written = self.manager_writes[-1]
+        self.assertEqual(written['mode'], 'update'); self.assertEqual(written['session']['場次ID'], 'echo-A')
+        self.assertEqual(written['session']['上課日期'], '2026-10-21'); self.assertEqual(written['session']['學員人數'], '0')
+        self.assertEqual(written['session']['開放填答'], '否'); self.assertEqual(len(self.admin_catalog), 6)
+
+    def test_conflicting_edit_keeps_draft_and_requires_reloading_current_version(self):
+        self.admin_login(); self.page.locator('[data-admin-row="2"]').click()
+        self.page.locator('#adminStudents').fill('7')
+        self.admin_versions[0] += 1; self.admin_catalog[0]['學員人數'] = 9
+        self.admin_data['課程清單'] = copy.deepcopy(self.admin_catalog)
+        self.page.locator('#adminSave').click()
+        self.page.wait_for_function('document.getElementById("adminMessage").textContent.includes("其他人已修改")')
+        self.assertEqual(self.page.locator('#adminStudents').input_value(), '7'); self.assertEqual(self.manager_writes, [])
+        self.page.locator('#adminRefresh').click()
+        self.page.wait_for_function('document.getElementById("adminMessage").textContent.includes("已重新載入")')
+        self.assertEqual(self.page.locator('#adminStudents').input_value(), '7')
+        self.page.locator('[data-admin-row="2"]').click(); self.assertEqual(self.page.locator('#adminStudents').input_value(), '9')
+        self.page.locator('#adminStudents').fill('7'); self.page.locator('#adminSave').click()
+        self.page.wait_for_function('document.getElementById("adminMessage").textContent.includes("已儲存")')
+        self.assertEqual(len(self.manager_writes), 1)
+
+    def test_expired_admin_session_keeps_draft_for_relogin_and_logout_clears_editing_access(self):
+        self.admin_login(); self.page.locator('#adminDate').fill('2026-11-01'); self.page.locator('#adminStudents').fill('12')
+        self.admin_expired = True; self.page.locator('#adminSave').click()
+        self.page.wait_for_function('document.getElementById("adminMessage").textContent.includes("登入已過期")')
+        self.assertFalse(self.page.locator('#adminWorkspace').is_visible()); self.assertEqual(self.manager_writes, [])
+        self.page.locator('#adminPassword').fill('test-admin'); self.page.locator('#adminLoginSubmit').click()
+        self.page.wait_for_function('document.getElementById("adminMessage").textContent.includes("已登入")')
+        self.assertEqual(self.page.locator('#adminStudents').input_value(), '12')
+        self.page.locator('#adminSave').click()
+        self.page.wait_for_function('document.getElementById("adminMessage").textContent.includes("已儲存")')
+        self.page.locator('#adminLogout').click()
+        self.assertFalse(self.page.locator('#adminWorkspace').is_visible()); self.assertTrue(self.page.locator('#adminLoginForm').is_visible())
+        self.assertEqual(self.page.locator('#adminPassword').input_value(), '')
+        self.assertFalse(self.page.evaluate('CourseAdmin.isAuthenticated()'))
+
+    def test_admin_mobile_dialog_fits_and_escape_restores_focus(self):
+        self.page.set_viewport_size({'width':390, 'height':844}); self.admin_login(dashboard=False)
+        self.assertTrue(self.page.evaluate('document.documentElement.scrollWidth <= innerWidth'))
+        self.assertTrue(self.page.locator('#adminDialog').evaluate('(e)=>e.scrollWidth <= e.clientWidth'))
+        self.page.keyboard.press('Escape')
+        self.assertFalse(self.page.locator('#adminDialog').is_visible())
+        self.assertFalse(self.page.evaluate('document.documentElement.classList.contains("admin-dialog-open")'))
+
+    def test_dashboard_refresh_clears_revoked_admin_access_and_preserves_the_draft(self):
+        self.admin_login(); self.page.locator('#adminDate').fill('2026-11-03'); self.page.locator('#adminStudents').fill('5')
+        self.admin_expired = True; self.page.evaluate('load()')
+        self.assertFalse(self.page.locator('#adminWorkspace').is_visible())
+        self.assertTrue(self.page.locator('#adminLoginForm').is_visible())
+        self.assertEqual(self.page.locator('#adminStudents').input_value(), '5')
+        self.assertFalse(self.page.evaluate('CourseAdmin.isAuthenticated()')); self.assertEqual(self.manager_writes, [])
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

@@ -9,6 +9,8 @@ const COURSE_SHEET = '課程清單';
 const TZ = 'Asia/Taipei';
 const COURSE_NAMES = ['心臟超音波', '內視鏡', '腹部超音波', '腹腔鏡'];
 const COURSE_HEADERS = ['場次ID', '課程', '上課日期', '開始時間', '學員人數', '狀態', '開放填答'];
+const ADMIN_HEADER = '管理課程（是／否）';
+const ADMIN_SECONDS = 1800;
 
 // 僅接受八張問卷工作表，防止問卷寫入課程清單或密碼管理。
 function doPost(e) {
@@ -17,6 +19,7 @@ function doPost(e) {
   try {
     lock.waitLock(20000); locked = true;
     const data = JSON.parse(e.postData.contents);
+    if (data.action) return adminPost(data);
     token = String(data.receiptToken || '');
     if (!/^[a-f0-9-]{36}$/i.test(token)) throw new Error('收件識別碼格式錯誤');
     const previous = CacheService.getScriptCache().get('receipt:' + token);
@@ -68,6 +71,7 @@ function sheetValue(value) {
 
 function doGet(e) {
   const p = (e && e.parameter) || {};
+  if (String(p.action || '').startsWith('admin-')) return adminGet(p);
   // 不透明的隨機識別碼，只回傳收件狀態，避免 no-cors POST 被拒仍顯示成功。
   if (p.action === 'receipt') {
     const token = String(p.token || '');
@@ -85,13 +89,17 @@ function doGet(e) {
     } catch (err) { return json({ ok: false, error: String(err) }); }
   }
   if (!checkPassword(p.pw)) return json({ ok: false, error: 'auth' });
-  const only = p.sheet, out = {};
+  return json({ ok: true, data: dashboardData(p.sheet) });
+}
+
+function dashboardData(only) {
+  const out = {};
   SpreadsheetApp.getActiveSpreadsheet().getSheets().forEach(sh => {
     const name = sh.getName();
     if (name === PW_SHEET || (only && name !== only)) return;
     out[name] = sheetRows(sh);
   });
-  return json({ ok: true, data: out });
+  return out;
 }
 
 function sheetRows(sh) {
@@ -99,12 +107,15 @@ function sheetRows(sh) {
   if (v.length < 2) return [];
   const h = v[0].map(String);
   return v.slice(1).filter(r => r.some(c => c !== '' && c !== null))
-    .map(r => Object.fromEntries(h.map((k, i) => {
-      const c = r[i];
-      // Sheet 時間欄可能回傳 Date，保留 HH:mm 而非 1899 年日期。
-      const format = k === '開始時間' ? 'HH:mm' : k === '上課日期' ? 'yyyy-MM-dd' : 'yyyy/MM/dd HH:mm:ss';
-      return [k, c instanceof Date ? Utilities.formatDate(c, TZ, format) : c];
-    })));
+    .map(r => sheetObject(h, r));
+}
+
+function sheetObject(headers, row) {
+  return Object.fromEntries(headers.map((key, i) => {
+    const value = row[i];
+    const format = key === '開始時間' ? 'HH:mm' : key === '上課日期' ? 'yyyy-MM-dd' : 'yyyy/MM/dd HH:mm:ss';
+    return [key, value instanceof Date ? Utilities.formatDate(value, TZ, format) : value];
+  }));
 }
 
 function courseSessions() {
@@ -152,21 +163,169 @@ function setupCourseSheet() {
   return sh;
 }
 
-// ---------- 密碼管理（沿用現有密碼與登入紀錄） ----------
-function checkPassword(pw) {
-  pw = String(pw || '').trim(); if (!pw) return false;
-  const sh = setupPasswordSheet(), last = sh.getLastRow(); if (last < 2) return false;
-  const rows = sh.getRange(2, 1, last - 1, 5).getValues();
+// ---------- 課程管理：登入權限與有效期限由伺服器驗證 ----------
+function enabled(value) { return /^(是|y|yes|true|啟用|1)$/i.test(String(value || '').trim()); }
+function digest(value) {
+  return Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(value), Utilities.Charset.UTF_8));
+}
+function adminError(code, message) { const error = new Error(message); error.code = code; throw error; }
+function requestID(value) { return /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(String(value || '')); }
+
+function passwordRecord(pw, admin = false) {
+  pw = String(pw || '').trim(); if (!pw) return null;
+  const sh = setupPasswordSheet(), last = sh.getLastRow(); if (last < 2) return null;
+  const width = Math.max(sh.getLastColumn(), 5);
+  const headers = sh.getRange(1, 1, 1, width).getValues()[0];
+  const adminColumn = headers.indexOf(ADMIN_HEADER);
+  const rows = sh.getRange(2, 1, last - 1, width).getValues();
   for (let i = 0; i < rows.length; i++) {
-    const [p, , on, , cnt] = rows[i];
-    const enabled = String(on).trim() === '' || /^(是|y|yes|true|啟用|1)$/i.test(String(on).trim());
-    if (String(p).trim() === pw && enabled) {
-      sh.getRange(i + 2, 4, 1, 2).setValues([[Utilities.formatDate(new Date(), TZ, 'yyyy/MM/dd HH:mm:ss'), (Number(cnt) || 0) + 1]]);
-      return true;
+    const [p, , on, , count] = rows[i];
+    const active = String(on).trim() === '' || enabled(on);
+    if (String(p).trim() === pw && active && (!admin || (adminColumn >= 0 && enabled(rows[i][adminColumn])))) {
+      return { sh, row: i + 2, count };
     }
   }
-  return false;
+  return null;
 }
+function stampLogin(record) {
+  record.sh.getRange(record.row, 4, 1, 2).setValues([[Utilities.formatDate(new Date(), TZ, 'yyyy/MM/dd HH:mm:ss'), (Number(record.count) || 0) + 1]]);
+}
+function checkPassword(pw) { const record = passwordRecord(pw); if (!record) return false; stampLogin(record); return true; }
+
+function requireAdmin(token) {
+  if (!requestID(token)) adminError('admin-auth', '管理者登入已過期，請重新登入。');
+  const cached = CacheService.getScriptCache().get('admin-session:' + token);
+  if (!cached) adminError('admin-auth', '管理者登入已過期，請重新登入。');
+  const session = JSON.parse(cached), sh = setupPasswordSheet();
+  const width = Math.max(sh.getLastColumn(), 5), headers = sh.getRange(1, 1, 1, width).getValues()[0];
+  const roleColumn = headers.indexOf(ADMIN_HEADER);
+  const row = session.row <= sh.getLastRow() ? sh.getRange(session.row, 1, 1, width).getValues()[0] : [];
+  if (session.expiresAt <= Date.now() || roleColumn < 0 || !enabled(row[roleColumn])
+    || !(String(row[2] ?? '').trim() === '' || enabled(row[2])) || digest(String(row[0] || '').trim()) !== session.passwordHash) {
+    CacheService.getScriptCache().remove('admin-session:' + token);
+    adminError('admin-auth', '管理者登入已過期或權限已停用，請重新登入。');
+  }
+  return session;
+}
+
+function adminPost(data) {
+  const cache = CacheService.getScriptCache();
+  let resultKey = '';
+  try {
+    if (data.action === 'admin-logout') {
+      if (requestID(data.adminToken)) cache.remove('admin-session:' + data.adminToken);
+      return json({ ok: true });
+    }
+    if (!requestID(data.requestId)) adminError('validation', '收件識別碼格式錯誤。');
+    if (data.action === 'admin-login') {
+      resultKey = 'admin-login:' + data.requestId;
+      const record = passwordRecord(data.password, true);
+      if (!record) adminError('admin-auth', '密碼不正確、停用，或尚未開啟課程管理權限。');
+      const token = Utilities.getUuid(), expiresAt = Date.now() + ADMIN_SECONDS * 1000;
+      cache.put('admin-session:' + token, JSON.stringify({ row: record.row, passwordHash: digest(String(data.password).trim()), expiresAt }), ADMIN_SECONDS);
+      stampLogin(record);
+      cache.put(resultKey, JSON.stringify({ ok: true, adminToken: token, expiresAt }), 60);
+      return json({ ok: true });
+    }
+    if (data.action !== 'admin-save') adminError('validation', '不支援的管理操作。');
+    requireAdmin(data.adminToken);
+    resultKey = 'admin-receipt:' + data.adminToken + ':' + data.requestId;
+    const previous = cache.get(resultKey);
+    if (previous && JSON.parse(previous).ok) return json({ ok: true });
+    saveCourseSession(data);
+    cache.put(resultKey, JSON.stringify({ ok: true }), ADMIN_SECONDS);
+    return json({ ok: true });
+  } catch (error) {
+    const result = { ok: false, error: error.code || 'server', message: String(error.message || error) };
+    if (resultKey) cache.put(resultKey, JSON.stringify(result), data.action === 'admin-login' ? 60 : ADMIN_SECONDS);
+    return json(result);
+  }
+}
+
+function adminGet(p) {
+  try {
+    const cache = CacheService.getScriptCache();
+    if (p.action === 'admin-login-result') {
+      if (!requestID(p.requestId)) adminError('validation', '收件識別碼格式錯誤。');
+      const result = cache.get('admin-login:' + p.requestId);
+      return json(result ? { ...JSON.parse(result), received: true } : { ok: true, received: false });
+    }
+    requireAdmin(p.adminToken);
+    if (p.action === 'admin-catalog') return json({ ok: true, records: adminCatalog(), data: dashboardData() });
+    if (p.action === 'admin-receipt') {
+      if (!requestID(p.requestId)) adminError('validation', '收件識別碼格式錯誤。');
+      const result = cache.get('admin-receipt:' + p.adminToken + ':' + p.requestId);
+      return json(result ? { ...JSON.parse(result), received: true } : { ok: true, received: false });
+    }
+    adminError('validation', '不支援的管理操作。');
+  } catch (error) { return json({ ok: false, error: error.code || 'server', message: String(error.message || error) }); }
+}
+
+function courseSheetInfo() {
+  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(COURSE_SHEET);
+  if (!sh) adminError('setup', '請先執行 setupCourseSheet 建立課程清單。');
+  const values = sh.getDataRange().getValues(), headers = values[0].map(String);
+  if (COURSE_HEADERS.some(h => headers.filter(v => v === h).length !== 1)) adminError('setup', '課程清單欄位不完整或重複，請確認七個標準欄位。');
+  return { sh, values, headers };
+}
+function recordVersion(session, row) { return digest(JSON.stringify([row, ...COURSE_HEADERS.map(h => session[h] ?? '')])); }
+function adminCatalog() {
+  const { values, headers } = courseSheetInfo();
+  return values.slice(1).map((row, i) => {
+    const session = sheetObject(headers, row);
+    return { row: i + 2, session: Object.fromEntries(COURSE_HEADERS.map(h => [h, session[h] ?? ''])), version: recordVersion(session, i + 2) };
+  }).filter(r => COURSE_HEADERS.some(h => r.session[h] !== ''));
+}
+function validCourseSession(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) adminError('validation', '課程資料格式錯誤。');
+  const session = Object.fromEntries(COURSE_HEADERS.map(h => [h, String(input[h] ?? '').trim()]));
+  if (!session['場次ID'] || session['場次ID'].length > 80 || /^[=+@-]/.test(session['場次ID']) || /[\x00-\x1f\x7f]/.test(session['場次ID'])) adminError('validation', '請填寫有效的場次ID（最多80字，不可以公式符號開頭）。');
+  if (!COURSE_NAMES.includes(session['課程'])) adminError('validation', '請選擇四門模擬課程之一。');
+  const day = courseDay(session['上課日期']);
+  if (!day) adminError('validation', '請填寫有效的上課日期。');
+  session['上課日期'] = day;
+  if (session['開始時間'] && !/^([01]\d|2[0-3]):[0-5]\d$/.test(session['開始時間'])) adminError('validation', '開始時間格式須為 HH:mm。');
+  if (session['學員人數'] !== '') {
+    const n = Number(session['學員人數']);
+    if (!Number.isSafeInteger(n) || n < 0) adminError('validation', '學員人數須為非負整數或留白。');
+    session['學員人數'] = n;
+  }
+  if (!['預定', '已開課', '取消'].includes(session['狀態']) || !['是', '否'].includes(session['開放填答'])) adminError('validation', '請選擇有效的狀態與填答設定。');
+  return session;
+}
+function saveCourseSession(data) {
+  const session = validCourseSession(data.session), { sh, values, headers } = courseSheetInfo();
+  let row = null;
+  if (data.mode === 'update') {
+    row = Number(data.row);
+    if (!Number.isSafeInteger(row) || row < 2 || row > values.length) adminError('conflict', '場次已移動或移除，請重新載入清單後再編輯。');
+    const current = sheetObject(headers, values[row - 1]);
+    if (recordVersion(current, row) !== data.version) adminError('conflict', '其他人已修改此場次，請重新載入清單，再按「編輯」確認最新內容。');
+    if (session['場次ID'] !== String(current['場次ID'] ?? '').trim() || session['課程'] !== String(current['課程'] ?? '').trim()) adminError('validation', '既有場次的ID與課程不可更改；請新增場次並將原場次設為取消。');
+  } else if (data.mode !== 'create') adminError('validation', '不支援的儲存方式。');
+  if (values.slice(1).some((r, i) => i + 2 !== row && String(r[headers.indexOf('場次ID')] || '').trim() === session['場次ID'])) adminError('validation', '場次ID已存在，請使用不同ID。');
+  if (row) {
+    const range = sh.getRange(row, 1, 1, headers.length), formulas = range.getFormulas()[0];
+    range.setValues([headers.map((h, i) => COURSE_HEADERS.includes(h) ? session[h] : formulas[i] || values[row - 1][i])]);
+  } else sh.appendRow(headers.map(h => COURSE_HEADERS.includes(h) ? session[h] : ''));
+}
+
+// 升級現有密碼表：只新增管理權限欄，不改密碼或登入紀錄，也不自動授權。
+function setupCourseAdmin() {
+  const sh = setupPasswordSheet(), width = sh.getLastColumn();
+  const headers = sh.getRange(1, 1, 1, width).getValues()[0];
+  let column = headers.indexOf(ADMIN_HEADER) + 1;
+  if (!column) {
+    column = width + 1;
+    sh.getRange(1, column, 1, 1).setValues([[ADMIN_HEADER]]).setFontWeight('bold').setBackground('#1B1410').setFontColor('#FFD84D');
+    if (sh.getLastRow() > 1) sh.getRange(2, column, sh.getLastRow() - 1, 1).setValues(Array.from({ length: sh.getLastRow() - 1 }, () => ['否']));
+  }
+  sh.getRange(2, column, 999, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['是', '否'], true).setAllowInvalid(false).build());
+  sh.getRange(1, column, 1, 1).setNote('只有「是」且密碼啟用的使用者能在儀表板新增或修改課程。預設「否」保留查看權限。');
+  return sh;
+}
+
+// ---------- 密碼管理（沿用現有密碼與登入紀錄） ----------
 function setupPasswordSheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet(); let sh = ss.getSheetByName(PW_SHEET); if (sh) return sh;
   sh = ss.insertSheet(PW_SHEET, 0);

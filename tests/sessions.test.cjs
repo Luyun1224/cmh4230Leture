@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const root = path.resolve(__dirname, '..');
 const shared = { window: {} }; vm.createContext(shared);
 vm.runInContext(fs.readFileSync(path.join(root, 'assets/course-sessions.js'), 'utf8'), shared);
@@ -29,7 +30,7 @@ test('only explicit class dates or IDs resolve a session, never the answer times
 });
 
 class Sheet {
-  constructor(name, values = []) { this.name = name; this.values = values; }
+  constructor(name, values = []) { this.name = name; this.values = values; this.formulas = new Map(); }
   getName() { return this.name; }
   getLastColumn() { return Math.max(0, ...this.values.map(r => r.length)); }
   getLastRow() { return this.values.length; }
@@ -38,6 +39,7 @@ class Sheet {
     const target = this;
     const range = {
       getValues: () => Array.from({ length: rows }, (_, n) => Array.from({ length: columns }, (_, m) => target.values[row - 1 + n]?.[column - 1 + m] ?? '')),
+      getFormulas: () => Array.from({ length: rows }, (_, n) => Array.from({ length: columns }, (_, m) => target.formulas.get(`${row + n}:${column + m}`) || '')),
       setValues: values => { values.forEach((r, n) => { target.values[row - 1 + n] ||= []; r.forEach((v, m) => { target.values[row - 1 + n][column - 1 + m] = v; }); }); return range; }
     };
     for (const method of ['setFontWeight', 'setBackground', 'setFontColor', 'setNumberFormat', 'setDataValidation', 'setNote', 'setValue']) range[method] = () => range;
@@ -56,10 +58,12 @@ function backend() {
       getActiveSpreadsheet: () => ({ getSheetByName: name => sheets.get(name), getSheets: () => [...sheets.values()], insertSheet: name => { const sh = new Sheet(name); sheets.set(name, sh); return sh; } }),
       newDataValidation: () => { const v = {}; for (const k of ['requireValueInList', 'requireFormulaSatisfied', 'setAllowInvalid', 'build']) v[k] = () => v; return v; }
     },
-    CacheService: { getScriptCache: () => ({ get: key => cache.get(key), put: (key, value) => cache.set(key, value) }) },
+    CacheService: { getScriptCache: () => ({ get: key => cache.get(key), put: (key, value) => cache.set(key, value), remove: key => cache.delete(key) }) },
     LockService: { getScriptLock: () => ({ waitLock: () => { locks++; }, releaseLock: () => { locks--; } }) },
     ContentService: { MimeType: { JSON: 'json' }, createTextOutput: text => ({ setMimeType: () => JSON.parse(text) }) },
-    Utilities: { formatDate: (d, tz, fmt) => {
+    Utilities: { DigestAlgorithm: { SHA_256: 'sha256' }, Charset: { UTF_8: 'utf8' },
+      getUuid: () => crypto.randomUUID(), computeDigest: (algorithm, value, charset) => [...crypto.createHash(algorithm).update(value, charset).digest()], base64Encode: bytes => Buffer.from(bytes).toString('base64'),
+      formatDate: (d, tz, fmt) => {
       const date = new Intl.DateTimeFormat('sv-SE', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
       const time = new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).format(d);
       return fmt === 'yyyy-MM-dd' ? date : fmt === 'HH:mm' ? time.slice(0, 5) : date.replaceAll('-', '/') + ' ' + time;
@@ -111,4 +115,108 @@ test('course sheet setup preserves existing data and creates only headers when a
   ctx.setupCourseSheet(); assert.equal(JSON.stringify(sheets.get('課程清單').values), before);
   sheets.delete('課程清單'); ctx.setupCourseSheet(); assert.equal(sheets.get('課程清單').values.length, 1);
   assert.equal(sheets.get('課程清單').values[0][0], '場次ID'); ctx.setupCourseSheet(); assert.equal(sheets.get('課程清單').values.length, 1);
+});
+
+function adminEnvironment() {
+  const fixture = backend(), { context: ctx, sheets } = fixture;
+  ctx.setupCourseAdmin();
+  const sh = sheets.get('密碼管理'), column = sh.values[0].indexOf('管理課程（是／否）');
+  sh.values[1][column] = '是';
+  const id = crypto.randomUUID();
+  const post = payload => ctx.doPost({ postData: { contents: JSON.stringify(payload) } });
+  assert.equal(post({ action: 'admin-login', password: 'test-only', requestId: id }).ok, true);
+  const login = ctx.doGet({ parameter: { action: 'admin-login-result', requestId: id } });
+  assert.equal(login.ok, true); assert.equal(login.received, true);
+  const get = action => ctx.doGet({ parameter: { action, adminToken: login.adminToken } });
+  const save = (payload, requestId = crypto.randomUUID()) => {
+    const result = post({ action: 'admin-save', adminToken: login.adminToken, requestId, ...payload });
+    return { result, requestId, receipt: ctx.doGet({ parameter: { action: 'admin-receipt', adminToken: login.adminToken, requestId } }) };
+  };
+  return { ...fixture, post, save, get, adminToken: login.adminToken, roleColumn: column, login };
+}
+test('management permission upgrade preserves passwords and login history without granting access by default', () => {
+  const { context: ctx, sheets } = backend(), passwordSheet = sheets.get('密碼管理');
+  const before = [...passwordSheet.values[1]];
+  ctx.setupCourseAdmin();
+  const column = passwordSheet.values[0].indexOf('管理課程（是／否）');
+  assert.equal(column, 5); assert.deepEqual(passwordSheet.values[1].slice(0, 5), before);
+  assert.equal(passwordSheet.values[1][column], '否');
+  passwordSheet.values[1][column] = '是'; ctx.setupCourseAdmin();
+  assert.equal(passwordSheet.values[1][column], '是'); assert.equal(passwordSheet.getLastColumn(), 6);
+  const req = crypto.randomUUID(); passwordSheet.values[1][column] = '否';
+  const result = ctx.doPost({ postData: { contents: JSON.stringify({ action: 'admin-login', password: 'test-only', requestId: req }) } });
+  assert.equal(result.ok, false); assert.equal(result.error, 'admin-auth');
+  assert.equal(ctx.doGet({ parameter: { action: 'admin-login-result', requestId: req } }).error, 'admin-auth');
+  assert.equal(ctx.checkPassword('test-only'), true);
+});
+test('administrator login uses a POST password; session cache contains only password hash and metadata', () => {
+  const { get, login, cache, context: ctx } = adminEnvironment();
+  assert.equal(typeof login.expiresAt, 'number'); assert.ok(login.expiresAt > Date.now());
+  const catalog = get('admin-catalog'); assert.equal(catalog.ok, true); assert.equal(catalog.records.length, 6);
+  assert.equal(Object.hasOwn(catalog.data, '密碼管理'), false);
+  assert.equal([...cache.values()].some(value => value.includes('test-only')), false);
+  assert.equal(ctx.doGet({ parameter: { action: 'admin-catalog', pw: 'test-only' } }).error, 'admin-auth');
+  assert.equal(ctx.doGet({ parameter: { action: 'admin-receipt', adminToken: crypto.randomUUID(), requestId: crypto.randomUUID() } }).error, 'admin-auth');
+  assert.equal(ctx.doGet({ parameter: { action: 'admin-login-result', requestId: crypto.randomUUID() } }).received, false);
+});
+test('authenticated course creation updates the Sheet exactly once and public surveys see the new open class', () => {
+  const { save, get, sheets, context: ctx } = adminEnvironment();
+  const initial = sheets.get('課程清單').getLastRow(), session = row('admin-new', { '課程': '腹腔鏡', '學員人數': 0, '狀態': '預定' });
+  const req = crypto.randomUUID();
+  assert.equal(save({ mode: 'create', session }, req).receipt.ok, true);
+  assert.equal(save({ mode: 'create', session }, req).receipt.ok, true);
+  assert.equal(sheets.get('課程清單').getLastRow(), initial + 1);
+  assert.equal(get('admin-catalog').records.at(-1).session['學員人數'], 0);
+  assert.equal(ctx.doGet({ parameter: { action: 'sessions' } }).sessions.some(s => s['場次ID'] === 'admin-new'), true);
+});
+test('expired, disabled, removed-role, changed-password and logged-out sessions cannot write even with a cached success receipt', () => {
+  for (const change of ['expires', 'disabled', 'role', 'password', 'logout']) {
+    const f = adminEnvironment(), { sheets, save, get, adminToken, cache, post, roleColumn } = f;
+    const session = row('revoked'), req = crypto.randomUUID();
+    assert.equal(save({ mode: 'create', session }, req).result.ok, true);
+    const before = JSON.stringify(sheets.get('課程清單').values);
+    if (change === 'expires') { const s = JSON.parse(cache.get('admin-session:' + adminToken)); s.expiresAt = 0; cache.set('admin-session:' + adminToken, JSON.stringify(s)); }
+    if (change === 'disabled') sheets.get('密碼管理').values[1][2] = '否';
+    if (change === 'role') sheets.get('密碼管理').values[1][roleColumn] = '否';
+    if (change === 'password') sheets.get('密碼管理').values[1][0] = 'changed-test-value';
+    if (change === 'logout') assert.equal(post({ action: 'admin-logout', adminToken }).ok, true);
+    assert.equal(save({ mode: 'create', session }, req).result.error, 'admin-auth');
+    assert.equal(get('admin-catalog').error, 'admin-auth');
+    assert.equal(JSON.stringify(sheets.get('課程清單').values), before);
+  }
+});
+test('missing or forged management authentication cannot create or alter classes', () => {
+  const { context: ctx, sheets } = backend(), before = JSON.stringify(sheets.get('課程清單').values);
+  for (const adminToken of ['', crypto.randomUUID()]) {
+    const result = ctx.doPost({ postData: { contents: JSON.stringify({ action: 'admin-save', password: 'test-only', adminToken, requestId: crypto.randomUUID(), mode: 'create', session: row('attack') }) } });
+    assert.equal(result.error, 'admin-auth'); assert.equal(JSON.stringify(sheets.get('課程清單').values), before);
+  }
+});
+test('course updates preserve identities and additional formulas; competing editors cannot silently overwrite newer values', () => {
+  const { get, save, sheets } = adminEnvironment(), sh = sheets.get('課程清單');
+  sh.values[0].push('同事的自訂欄'); sh.values[1].push(12); sh.formulas.set('2:8', '=6+6');
+  const record = get('admin-catalog').records[0];
+  const payload = { mode: 'update', row: record.row, version: record.version, session: { ...record.session, '上課日期': '2026-10-21', '學員人數': 9, '狀態': '已開課', '開放填答': '否' } };
+  assert.equal(save(payload).result.ok, true); assert.equal(sh.values[1][7], '=6+6');
+  assert.equal(sh.values[1][4], 9); assert.equal(sh.values[1][2], '2026-10-21');
+  const before = JSON.stringify(sh.values);
+  assert.equal(save({ ...payload, session: { ...payload.session, '學員人數': 2 } }).result.error, 'conflict');
+  assert.equal(JSON.stringify(sh.values), before);
+  const current = get('admin-catalog').records[0];
+  for (const changed of [{ '場次ID': 'rename' }, { '課程': '腹腔鏡' }]) {
+    assert.equal(save({ mode: 'update', row: current.row, version: current.version, session: { ...current.session, ...changed } }).result.error, 'validation');
+    assert.equal(JSON.stringify(sh.values), before);
+  }
+});
+test('invalid administrative fields, duplicate IDs and missing headers fail before any course row is changed', () => {
+  const { save, sheets } = adminEnvironment();
+  const before = JSON.stringify(sheets.get('課程清單').values);
+  for (const changed of [{ '場次ID': 'early' }, { '場次ID': '=formula' }, { '學員人數': -1 }, { '學員人數': 1.5 }, { '課程': '任意課程' }, { '上課日期': '2026-02-30' }, { '開始時間': '25:61' }, { '狀態': '刪除' }, { '開放填答': '' }]) {
+    assert.equal(save({ mode: 'create', session: row('valid-new', changed) }).result.error, 'validation');
+    assert.equal(JSON.stringify(sheets.get('課程清單').values), before);
+  }
+  sheets.get('課程清單').values[0][0] = '缺少場次ID';
+  const malformed = JSON.stringify(sheets.get('課程清單').values);
+  assert.equal(save({ mode: 'create', session: row('valid-new') }).result.error, 'setup');
+  assert.equal(JSON.stringify(sheets.get('課程清單').values), malformed);
 });

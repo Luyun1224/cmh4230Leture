@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap">
+<link rel="stylesheet" href="assets/course-admin.css">
 <style>
 /* Layout: 海報式漫畫風儀表板——橘色放射光芒標頭＋粗黑框貼紙卡；黑底分頁籤；卡片標題用螢光筆底線。前測＝橘、後測＝深綠 */
 :root{
@@ -34,7 +35,7 @@ header.top{color:var(--ink);padding-inline:16px;padding-block:22px 0;border-bott
 h1{margin:0;font-size:clamp(34px,6vw,60px);font-weight:900;line-height:1.08;letter-spacing:.03em;color:var(--pop);
   -webkit-text-stroke:8px var(--ink);paint-order:stroke fill;text-shadow:5px 6px 0 var(--ink);text-wrap:balance}
 h1 .w{color:#fff}
-.status{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px;color:var(--ink);font-weight:700}
+.status{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-left:auto;font-size:13px;color:var(--ink);font-weight:700}
 .chip{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 12px;font-weight:900;font-size:12.5px;border:2.5px solid var(--ink);background:var(--card)}
 .chip.live{background:#D7F2E3;color:#0F5E40}
 .chip.demo{background:var(--pop);color:var(--ink)}
@@ -188,10 +189,11 @@ svg text{font-family:var(--f)}
   <form class="gate-card" id="loginForm" autocomplete="off">
     <div class="eyebrow">奇美醫院 臨床技能中心</div>
     <h1 class="gate-h"><span class="w">模擬課程</span>成效儀表板</h1>
-    <label class="gate-l" for="pw">請輸入管理密碼</label>
+    <label class="gate-l" for="pw">請輸入儀表板密碼</label>
     <input type="password" id="pw" placeholder="密碼" autocomplete="current-password">
     <div class="gate-err" id="loginErr" hidden></div>
     <button class="btn gate-btn" id="loginBtn" type="submit">進入儀表板</button>
+    <button class="btn btn-ghost" id="adminEntry" type="button">管理者登入</button>
     <p class="gate-note">密碼由中心管理者在 Google Sheet「密碼管理」分頁設定。</p>
     <p class="gate-note" id="demoHint" hidden>預覽版：輸入任意文字即可查看示範資料。</p>
   </form>
@@ -209,6 +211,7 @@ svg text{font-family:var(--f)}
         <span class="chip" id="srcChip"><span class="dot"></span><span id="srcText">載入中</span></span>
         <span id="updated"></span>
         <button class="btn" id="reload" type="button">重新整理</button>
+        <button class="btn" id="adminOpen" type="button">管理者登入</button>
         <button class="btn btn-ghost" id="logout" type="button">登出</button>
       </div>
     </div>
@@ -229,7 +232,50 @@ svg text{font-family:var(--f)}
 </div>
 <div class="tip" id="tip" hidden></div>
 
+<dialog class="admin-dialog" id="adminDialog" aria-labelledby="adminTitle">
+  <header class="admin-heading">
+    <div><h2 id="adminTitle">課程管理</h2><p id="adminSessionStatus">請使用具有課程管理權限的密碼</p></div>
+    <div class="admin-actions"><button class="btn btn-ghost" id="adminLogout" type="button" hidden>登出管理者</button><button class="btn btn-ghost" id="adminClose" type="button">關閉</button></div>
+  </header>
+  <div class="admin-content">
+    <p class="admin-message" id="adminMessage" role="status" aria-live="polite" hidden></p>
+    <form class="admin-login" id="adminLoginForm">
+      <label class="admin-field" for="adminPassword">管理者密碼<input id="adminPassword" type="password" autocomplete="current-password" required></label>
+      <p class="admin-help">使用已開啟課程管理權限的密碼，即可維護四門模擬課程的場次。</p>
+      <button class="btn" type="submit" id="adminLoginSubmit">登入課程管理</button>
+    </form>
+    <section id="adminWorkspace" hidden aria-label="課程場次維護">
+      <div class="admin-toolbar">
+        <label for="adminFilter">課程 <select id="adminFilter"><option value="">全部課程</option></select></label>
+        <div class="admin-actions"><button class="btn btn-ghost" id="adminRefresh" type="button">重新載入清單</button><button class="btn" id="adminNew" type="button">新增場次</button></div>
+      </div>
+      <div class="admin-columns">
+        <div class="admin-list"><div class="tw"><table><thead><tr><th>課程／場次ID</th><th>上課日期</th><th>人數</th><th>狀態</th><th>操作</th></tr></thead><tbody id="adminRows"></tbody></table></div></div>
+        <form class="card admin-editor" id="adminEditForm">
+          <h3 id="adminEditTitle">新增課程場次</h3>
+          <label class="admin-field" for="adminCourse">課程<select id="adminCourse" required></select></label>
+          <div class="admin-pair">
+            <label class="admin-field" for="adminDate">上課日期<input id="adminDate" type="date" required></label>
+            <label class="admin-field" for="adminTime">開始時間（選填）<input id="adminTime" type="time"></label>
+          </div>
+          <label class="admin-field" for="adminStudents">學員人數<input id="adminStudents" type="number" min="0" step="1" placeholder="尚未確定可留白"></label>
+          <p class="admin-help">預定場次填預計人數，上課後改為實際人數；留白表示待填，0 表示確認沒有學員。</p>
+          <div class="admin-pair">
+            <label class="admin-field" for="adminState">場次狀態<select id="adminState"><option>預定</option><option>已開課</option><option>取消</option></select></label>
+            <label class="admin-field" for="adminAllow">開放填答<select id="adminAllow"><option value="是">開放</option><option value="否">關閉</option></select></label>
+          </div>
+          <p class="admin-help">只有「已開課」計入開辦場次與學員人次。前測可提前開放填寫；取消或關閉填答不會刪除既有問卷。</p>
+          <label class="admin-field" for="adminID">場次ID（自動產生）<input id="adminID" type="text" readonly></label>
+          <p class="admin-help">場次ID與課程儲存後固定，避免既有問卷連結與配對失效。</p>
+          <div class="admin-actions"><button class="btn" id="adminSave" type="submit">建立場次</button><button class="btn btn-ghost" id="adminCancelEdit" type="button">取消編輯</button></div>
+        </form>
+      </div>
+    </section>
+  </div>
+</dialog>
+
 <script src="assets/course-sessions.js"></script>
+<script src="assets/course-admin.js"></script>
 <script>
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbwQkTfzyyIxux8yMf93oNTXn5YeXMQ2BUCgBypVnjHsgmf7LtLoTzrqWwEJB1pZ7_EC/exec';
 
@@ -339,6 +385,11 @@ function applyData(res) {
 
 async function load() {
   $('#srcText').textContent = '載入中';
+  if (CourseAdmin.isAuthenticated()) {
+    try { await CourseAdmin.refresh(); }
+    catch (error) { $('#srcText').textContent = '連線失敗'; $('#srcChip').className = 'chip demo'; }
+    return;
+  }
   const res = await fetchData(PW);
   if (!res.ok) {
     if (res.reason === 'auth') { logout('密碼已變更或停用，請重新登入。'); return; }
@@ -348,6 +399,7 @@ async function load() {
 }
 
 function logout(msg) {
+  CourseAdmin.logout(false);
   PW = ''; ss.set('sim_dash_pw', null); RAW = null;
   $('#app').hidden = true; $('#gate').hidden = false; $('#pw').value = '';
   if (msg) showLoginErr(msg); else $('#loginErr').hidden = true;
@@ -871,6 +923,7 @@ function demoWorry(id, rnd) {
 }
 
 // ---------- boot ----------
+CourseAdmin.init({ url: GAS_URL, onData: applyData, onExit: () => { if (!PW) logout(); } });
 (() => { const h = (location.hash || '').slice(1); if (h && (h === 'overview' || COURSES.some(c => c.id === h))) state.tab = h; })();
 $('#loginForm').addEventListener('submit', login);
 $('#logout').onclick = () => logout();
