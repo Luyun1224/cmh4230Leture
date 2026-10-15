@@ -44,6 +44,7 @@ class BrowserChecks(unittest.TestCase):
         self.context = self.browser.new_context()
         self.page = self.context.new_page()
         self.errors = []; self.sent = []; self.reject = False; self.catalog_fail = False
+        self.post_drop = 0; self.never_received = False; self.receipt_checks = 0
         self.admin_catalog = copy.deepcopy(CATALOG); self.admin_versions = [0] * len(CATALOG)
         self.admin_token = 'abcdef01-1234-4234-8234-123456789abc'; self.admin_expired = False
         self.admin_login_results = {}; self.admin_receipts = {}; self.manager_writes = []; self.read_urls = []
@@ -68,8 +69,12 @@ class BrowserChecks(unittest.TestCase):
                 self.admin_post(payload)
                 route.fulfill(status=200, content_type='application/json', body='{"ok":true}')
                 return
+            if self.post_drop:
+                # 模擬網路中斷：請求沒有送達後台。
+                self.post_drop -= 1; route.abort(); return
             self.sent.append(payload)
-            result = {'ok': True}
+            result = {'ok': not self.reject}
+            if self.reject: result['error'] = 'Error: 場次不存在或未開放填答'
         elif action == 'admin-login-result':
             result = {**self.admin_login_results.get(params['requestId'][0], {'ok': True}), 'received': True}
         elif action.startswith('admin-'):
@@ -80,7 +85,10 @@ class BrowserChecks(unittest.TestCase):
             else:
                 result = {**self.admin_receipts.get(params['requestId'][0], {'ok': True}), 'received': True}
         elif 'action=receipt' in request.url:
-            result = {'ok': not self.reject, 'received': True}
+            self.receipt_checks += 1
+            token = params.get('token', [''])[0]
+            got = not self.never_received and any(p.get('receiptToken') == token for p in self.sent)
+            result = {'ok': not self.reject, 'received': got}
             if self.reject: result['error'] = '場次不存在或未開放填答'
         elif self.catalog_fail:
             result = {'ok': False, 'error': '清單尚未建立'}
@@ -195,13 +203,41 @@ class BrowserChecks(unittest.TestCase):
         self.page.wait_for_function('document.getElementById("sessionSelect").value==="echo-A"')
         self.fill_answers(); self.reject = True
         self.page.locator('#submitBtn').click()
-        self.page.wait_for_function('document.getElementById("formerr").textContent.includes("未開放填答")')
+        self.page.locator('#sendFail').wait_for(state='visible')
+        self.assertIn('未開放填答', self.page.locator('#sendReason').inner_text())
+        self.assertNotIn('Error:', self.page.locator('#sendReason').inner_text())
+        self.page.locator('#sendBack').click(); self.assertFalse(self.page.locator('#sendDialog').is_visible())
         self.assertFalse(self.page.locator('#done').is_visible()); self.assertTrue(self.page.locator('#form').is_visible())
         self.assertFalse(self.page.locator('#sessionSelect').is_disabled())
         self.assertFalse(self.page.locator('#form input').first.is_disabled())
         token = self.sent[-1]['receiptToken']; self.reject = False
         self.page.locator('#submitBtn').click(); self.page.locator('#done').wait_for(state='visible')
         self.assertEqual(self.sent[-1]['receiptToken'], token)
+        self.assertFalse(self.page.locator('#sendDialog').is_visible())
+
+    def test_direct_reply_confirms_in_one_round_trip(self):
+        self.page.goto(self.base + 'posttest.html?course=echo&session=echo-A')
+        self.page.wait_for_function('document.getElementById("sessionSelect").value==="echo-A"')
+        self.fill_answers(); self.page.locator('#submitBtn').click()
+        self.page.locator('#done').wait_for(state='visible')
+        self.assertEqual(len(self.sent), 1); self.assertEqual(self.receipt_checks, 0)
+
+    def test_dropped_request_is_resent_and_only_confirmed_receipts_succeed(self):
+        self.page.goto(self.base + 'posttest.html?course=echo&session=echo-A')
+        self.page.wait_for_function('document.getElementById("sessionSelect").value==="echo-A"')
+        self.fill_answers(); self.post_drop = 1
+        self.page.locator('#submitBtn').click(); self.page.locator('#done').wait_for(state='visible')
+        self.assertEqual(len(self.sent), 1); self.assertGreater(self.receipt_checks, 0)
+        # 後台始終沒有確認收件：一定要跳出失敗視窗，不可顯示成功。
+        self.sent.clear(); self.page.goto(self.base + 'pretest.html?course=echo&session=echo-A')
+        self.page.wait_for_function('document.getElementById("sessionSelect").value==="echo-A"')
+        self.fill_answers(); self.post_drop = 99; self.never_received = True
+        self.page.locator('#submitBtn').click()
+        self.page.locator('#sendFail').wait_for(state='visible', timeout=20000)
+        self.assertFalse(self.page.locator('#done').is_visible())
+        self.assertIn('無法確認', self.page.locator('#sendReason').inner_text())
+        self.post_drop = 0; self.never_received = False
+        self.page.locator('#sendRetry').click(); self.page.locator('#done').wait_for(state='visible')
 
     def apply_fixture(self):
         self.page.goto(self.base + 'index.html')
