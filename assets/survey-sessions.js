@@ -1,23 +1,47 @@
 window.SurveySessions = (() => {
-  let catalog = [], loaded = false, course = null, onSelect = () => {};
+  // 問卷永遠開放：清單上沒有的上課日期，學員可自行選日期送出。
+  const MANUAL = '__date';
+  let catalog = [], loaded = false, failed = false, autoPicked = false, course = null, onSelect = () => {};
   let pending = null;
   const el = id => document.getElementById(id);
-  function selected() { return catalog.find(s => s.id === el('sessionSelect').value && s.course === course?.id) || null; }
+  const today = () => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Taipei' }).format(new Date());
+  function selected() {
+    if (!course) return null;
+    if (el('sessionSelect').value === MANUAL) {
+      const date = CourseSessions.date(el('sessionDate').value);
+      return date ? { id: '', course: course.id, date, time: '', manual: true } : null;
+    }
+    return catalog.find(s => s.id === el('sessionSelect').value && s.course === course.id) || null;
+  }
+  function nearest(options) {
+    const day = today();
+    return options.find(s => s.date >= day) || options[options.length - 1];
+  }
   function render() {
-    const select = el('sessionSelect'), previous = select.value;
-    select.replaceChildren(new Option('請選擇上課場次', ''));
-    catalog.filter(s => s.course === course?.id && s.open && s.status !== '取消').forEach(s => select.add(new Option(CourseSessions.label(s), s.id)));
+    const select = el('sessionSelect'), previous = autoPicked ? '' : select.value;
+    const options = catalog.filter(s => s.course === course?.id && s.open && s.status !== '取消');
+    select.replaceChildren(new Option('請選擇上課日期', ''));
+    // 只顯示日期；同一天有兩場時才補上開始時間區分。
+    options.forEach(s => select.add(new Option(options.some(o => o !== s && o.date === s.date) && s.time ? `${s.date} ${s.time}` : s.date, s.id)));
+    select.add(new Option(options.length ? '清單上沒有我的上課日期（自行選擇日期）' : '選擇上課日期', MANUAL));
     const linked = new URLSearchParams(location.search).get('session') || '';
     select.value = previous || linked;
-    select.disabled = !loaded || !course;
+    if (select.selectedIndex < 0) select.value = '';
+    // 不讓學員卡在空白選項：自動帶入最可能的上課日期（今天、下一場、否則最近一場）；
+    // 清單沒有場次或載入失敗時改為自行選日期（預設今天）。自動帶入的值之後仍讓連結指定的場次優先。
+    autoPicked = !select.value && !!course && (loaded || failed);
+    if (autoPicked) select.value = options.length ? nearest(options).id : MANUAL;
+    select.disabled = !course;
     el('sessionError').hidden = true;
-    el('sessionHint').textContent = !loaded ? '正在載入場次…' : select.options.length === 1
-      ? '目前沒有開放填答的場次，請聯絡課程管理者。' : '請選擇實際上課的場次；提前填寫前測也請選這一場。';
-    if (linked && !selected() && loaded && course) el('sessionHint').textContent = '連結指定的場次未開放或不屬於此課程，請確認上課場次後再選擇。';
+    el('sessionDateWrap').hidden = select.value !== MANUAL;
+    if (!el('sessionDate').value) el('sessionDate').value = today();
+    el('sessionHint').textContent = !loaded ? '場次清單載入中；也可以直接選「自行選擇日期」填寫。'
+      : options.length ? '已自動帶入最近的上課日期；若不是你上課那天，請改選。' : '請選擇實際上課的日期。';
+    if (linked && loaded && course && select.value !== linked) el('sessionHint').textContent = '連結指定的場次已不在清單上，請直接選擇上課日期。';
     onSelect(selected());
   }
   async function load(url) {
-    loaded = false; render();
+    loaded = false; failed = false; render();
     try {
       const endpoint = new URL(url); endpoint.searchParams.set('action', 'sessions');
       const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 15000);
@@ -28,15 +52,19 @@ window.SurveySessions = (() => {
       const parsed = CourseSessions.read(result.sessions);
       catalog = parsed.sessions; loaded = true; render();
     } catch (error) {
-      catalog = []; loaded = false;
-      el('sessionSelect').disabled = true;
-      el('sessionHint').textContent = '場次清單載入失敗，請重試；若持續失敗，請聯絡課程管理者確認清單與服務部署。';
-      onSelect(null);
+      catalog = []; loaded = false; failed = true; render();
+      el('sessionHint').textContent = '場次清單載入失敗，可按「重新載入場次」，或直接選「自行選擇日期」填寫。';
     }
   }
   function init({ url, changed }) {
     onSelect = changed;
-    el('sessionSelect').addEventListener('change', () => { el('sessionError').hidden = true; onSelect(selected()); });
+    const wrap = document.createElement('div');
+    wrap.id = 'sessionDateWrap'; wrap.className = 'textin'; wrap.hidden = true; wrap.style.marginTop = '12px';
+    wrap.innerHTML = '<label for="sessionDate" style="display:block;margin-bottom:6px">上課日期</label><input type="date" id="sessionDate" style="width:100%;padding:12px;font:inherit">';
+    el('sessionSelect').closest('.textin').after(wrap);
+    const changedSelection = () => { autoPicked = false; el('sessionError').hidden = true; el('sessionDateWrap').hidden = el('sessionSelect').value !== MANUAL; onSelect(selected()); };
+    el('sessionSelect').addEventListener('change', changedSelection);
+    el('sessionDate').addEventListener('change', changedSelection);
     el('sessionRetry').addEventListener('click', () => load(url));
     load(url);
   }

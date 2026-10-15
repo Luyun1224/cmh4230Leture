@@ -10,7 +10,7 @@ window.SurveyShare = (() => {
     course = selected;
     url = new URL(phase === 'pre' ? 'pretest.html' : 'posttest.html', PUBLIC_BASE);
     if (course) url.searchParams.set('course', course.id);
-    if (session && session.course === course?.id) url.searchParams.set('session', session.id);
+    if (session?.id && session.course === course?.id) url.searchParams.set('session', session.id);
     qr = qrcode(0, 'M'); qr.addData(url.href); qr.make();
     el('shareOpen').href = url.href;
     el('sharePoster').setAttribute('aria-label', `${course ? course.name : '所有課程'}${phase === 'pre' ? '前測' : '後測'}海報，掃描 QR Code 填寫，約 3 分鐘，記名填答。`);
@@ -93,7 +93,7 @@ window.SurveyShare = (() => {
     if (session) {
       rounded(ctx, 225, 1464, 790, 54, 25, INK, '#fff', 3);
       ctx.font = `700 26px ${FONT}`; ctx.fillStyle = '#fff';
-      ctx.fillText(`${session.date}${session.time ? ' ' + session.time : ''}｜${session.id}`, 620, 1499, 740);
+      ctx.fillText(`上課日期 ${session.date}`, 620, 1499, 740);
     }
     ctx.save(); ctx.translate(620, 1620); ctx.rotate(.018);
     rounded(ctx, -458, -54, 932, 100, 30, INK);
@@ -117,7 +117,7 @@ window.SurveyShare = (() => {
 
   async function downloadPoster() {
     const button = el('shareDownload'); button.disabled = true;
-    const filename = `模擬課程_${phase === 'pre' ? '前測' : '後測'}_${course ? course.short : '所有課程'}${session ? '_' + session.id.replace(/[\\/:*?"<>|]/g, '_') : ''}_海報.png`;
+    const filename = `模擬課程_${phase === 'pre' ? '前測' : '後測'}_${course ? course.short : '所有課程'}${session ? '_' + (session.id || session.date).replace(/[\\/:*?"<>|]/g, '_') : ''}_海報.png`;
     try {
       const blob = await new Promise(resolve => el('sharePoster').toBlob(resolve, 'image/png'));
       if (!blob) throw new Error('PNG export failed');

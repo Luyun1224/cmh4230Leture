@@ -106,10 +106,29 @@ test('early responses use registry date; duplicate receipt retries do not write 
   assert.equal(submit(ctx).ok, true); assert.equal(sh.values.length, 2);
   cache.clear(); assert.equal(submit(ctx).ok, true); assert.equal(sh.values.length, 2); assert.equal(locks(), 0);
 });
-test('wrong-course, missing, closed, cancelled and management-sheet writes are rejected without creating sheets', () => {
-  for (const [session, sheet] of [['early', '內視鏡_前測'], ['missing', '心臟超音波_前測'], ['closed', '心臟超音波_前測'], ['cancelled', '心臟超音波_後測'], ['duplicate', '心臟超音波_前測'], ['early', '課程清單'], ['early', '密碼管理']]) {
+test('surveys are always open: unknown, closed, cancelled or duplicate IDs fall back to the class date', () => {
+  for (const [session, sheet, id, day] of [['missing', '心臟超音波_前測', '', '2026-10-10'], ['closed', '心臟超音波_前測', 'closed', '2026-10-14'],
+    ['cancelled', '心臟超音波_後測', '', '2026-10-10'], ['duplicate', '心臟超音波_前測', '', '2026-10-10'], ['early', '內視鏡_前測', '', '2026-10-10'], ['', '腹腔鏡_後測', '', '2026-10-10']]) {
+    const { context: ctx, sheets } = backend();
+    assert.equal(submit(ctx, session, sheet).ok, true, session);
+    const sh = sheets.get(sheet), record = Object.fromEntries(sh.values[0].map((h, i) => [h, sh.values[1][i]]));
+    assert.equal(record['場次ID'], id, session); assert.equal(record['上課日期'], day, session);
+  }
+});
+test('a class date with exactly one registered session links to it; missing course list still accepts', () => {
+  const { context: ctx, sheets } = backend();
+  const post = (date, sheet = '心臟超音波_後測') => ctx.doPost({ postData: { contents: JSON.stringify({ sheet, receiptToken: crypto.randomUUID(), row: { '場次ID': '', '姓名': '甲', '上課日期': date } }) } });
+  sheets.get('課程清單').values.splice(1, 1); // 移除同日的 early，只剩 closed 一場
+  assert.equal(post('2026/10/14').ok, true);
+  assert.equal(sheets.get('心臟超音波_後測').values[1][0], 'closed');
+  sheets.delete('課程清單');
+  assert.equal(post('2026-10-30').ok, true); assert.equal(sheets.get('心臟超音波_後測').values.length, 3);
+});
+test('missing class dates and management-sheet writes are rejected without creating sheets', () => {
+  const noDate = ctx => ctx.doPost({ postData: { contents: JSON.stringify({ sheet: '心臟超音波_前測', receiptToken: token, row: { '場次ID': 'missing', '姓名': '甲' } }) } });
+  for (const send of [noDate, ctx => submit(ctx, 'early', '課程清單'), ctx => submit(ctx, 'early', '密碼管理')]) {
     const { context: ctx, sheets, locks } = backend();
-    assert.equal(submit(ctx, session, sheet).ok, false);
+    assert.equal(send(ctx).ok, false);
     assert.equal(sheets.size, 2); assert.equal(locks(), 0);
     assert.equal(ctx.doGet({ parameter: { action: 'receipt', token } }).ok, false);
   }

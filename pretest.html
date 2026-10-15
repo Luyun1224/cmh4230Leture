@@ -198,11 +198,11 @@ input[type=text]:focus,textarea:focus{outline:none;box-shadow:0 0 0 3px var(--po
   </section>
 
   <section class="card" id="sessionCard" hidden aria-labelledby="sessionLabel">
-    <div class="tab"><span class="no">STEP 2</span><label id="sessionLabel" for="sessionSelect">選擇上課場次</label></div>
+    <div class="tab"><span class="no">STEP 2</span><label id="sessionLabel" for="sessionSelect">選擇上課日期</label></div>
     <p class="intro" id="sessionHint" role="status">正在載入場次…</p>
-    <div class="textin"><select id="sessionSelect" required disabled style="width:100%;padding:12px;font:inherit"><option value="">請選擇上課場次</option></select></div>
+    <div class="textin"><select id="sessionSelect" required disabled style="width:100%;padding:12px;font:inherit"><option value="">請選擇上課日期</option></select></div>
     <button class="btn" id="sessionRetry" type="button" style="margin-top:12px">重新載入場次</button>
-    <p id="sessionError" role="alert" hidden>請先選擇上課場次，再送出問卷。</p>
+    <p id="sessionError" role="alert" hidden>請先選擇上課日期，再送出問卷。</p>
   </section>
 
   <div class="progress" id="progress" hidden><span>填答進度</span><div class="bar"><i id="barfill"></i></div><span class="pct" id="pct">0 / 0</span></div>
@@ -528,7 +528,7 @@ $('#form').addEventListener('submit', async e => {
     if (q.remember) store.set(q.remember, v);
   });
 
-  const paused = [...document.querySelectorAll('.course, #sessionSelect, #sessionRetry, #form input, #form textarea')].map(el => [el, el.disabled]);
+  const paused = [...document.querySelectorAll('.course, #sessionSelect, #sessionDate, #sessionRetry, #form input, #form textarea')].map(el => [el, el.disabled]);
   paused.forEach(([el]) => { el.disabled = true; });
   const btn = $('#submitBtn');
   btn.disabled = true; btn.firstChild.textContent = '送出中…';
