@@ -74,26 +74,40 @@ window.SurveySessions = (() => {
     el('sessionError').hidden = false; el('sessionCard').scrollIntoView({ behavior: 'smooth', block: 'center' });
     el('sessionSelect').focus(); return null;
   }
+  // 送出只在後台確認收件後才算成功：先直接讀 GAS 回應（一趟完成）；
+  // 讀不到回應時改用收件識別碼查詢，相同識別碼重送不會重複寫入。
+  const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+  const reason = text => String(text || '').replace(/^Error:\s*/, '');
+  class Rejected extends Error {}
+  async function timed(resource, options, ms) {
+    const controller = new AbortController(), timer = setTimeout(() => controller.abort(), ms);
+    try { return await fetch(resource, { ...options, signal: controller.signal }); } finally { clearTimeout(timer); }
+  }
+  async function receipt(url, token) {
+    const endpoint = new URL(url); endpoint.searchParams.set('action', 'receipt'); endpoint.searchParams.set('token', token);
+    const result = await (await timed(endpoint, {}, 8000)).json();
+    if (!result.ok) throw new Rejected(reason(result.error) || '問卷未能寫入。');
+    return result.received;
+  }
   async function send(url, payload) {
     const comparable = { ...payload.row }; delete comparable['時間戳記'];
     const key = JSON.stringify({ sheet: payload.sheet, row: comparable });
     if (!pending || pending.key !== key) pending = { key, token: crypto.randomUUID() };
-    const token = pending.token;
-    const body = JSON.stringify({ ...payload, receiptToken: token });
-    const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 20000);
+    const token = pending.token, body = JSON.stringify({ ...payload, receiptToken: token });
+    const post = { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body };
     try {
-      await fetch(url, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body, signal: controller.signal });
-      for (let i = 0; i < 6; i++) {
-        const endpoint = new URL(url); endpoint.searchParams.set('action', 'receipt'); endpoint.searchParams.set('token', token);
-        const response = await fetch(endpoint, { signal: controller.signal });
-        if (!response.ok) throw new Error('目前無法確認問卷收件，請稍後重試。');
-        const result = await response.json();
-        if (!result.ok) throw new Error(result.error || '問卷未能寫入，請確認場次是否開放。');
-        if (result.received) { pending = null; return; }
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
-      throw new Error('尚未確認收件，請稍後重試；相同答案重試會沿用收件識別碼。');
-    } finally { clearTimeout(timer); }
+      const result = await (await timed(url, post, 15000)).json();
+      if (result.ok) { pending = null; return; }
+      throw new Rejected(reason(result.error) || '問卷未能寫入。');
+    } catch (error) { if (error instanceof Rejected) throw error; }
+    // 直接回應讀不到（網路不穩或瀏覽器阻擋）：確認是否已收到，沒有就再送一次後確認。
+    try { if (await receipt(url, token)) { pending = null; return; } } catch (error) { if (error instanceof Rejected) throw error; }
+    try { await timed(url, { ...post, mode: 'no-cors' }, 15000); } catch (error) { /* 以收件查詢為準 */ }
+    for (let i = 0; i < 4; i++) {
+      try { if (await receipt(url, token)) { pending = null; return; } } catch (error) { if (error instanceof Rejected) throw error; }
+      await wait(1000);
+    }
+    throw new Error('目前無法確認後台是否收到問卷，可能是網路不穩。');
   }
   return { init, selectCourse, selected, requireSelection, send };
 })();

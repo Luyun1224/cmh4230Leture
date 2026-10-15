@@ -230,6 +230,23 @@ input[type=text]:focus,textarea:focus{outline:none;box-shadow:0 0 0 3px var(--po
   </div>
 </div>
 
+<dialog class="send-dialog" id="sendDialog" aria-labelledby="sendTitle" aria-describedby="sendBody">
+  <div id="sendBusy">
+    <div class="send-spin" aria-hidden="true"></div>
+    <h2 id="sendTitle">正在送出問卷…</h2>
+    <p id="sendBody">通常幾秒內完成，請勿關閉或重新整理頁面。</p>
+  </div>
+  <div id="sendFail" hidden>
+    <div class="send-icon" aria-hidden="true">⚠️</div>
+    <h2>問卷尚未送出成功</h2>
+    <p class="send-reason" id="sendReason"></p>
+    <p>別擔心，你的答案都還保留在畫面上。請確認網路後按「重新送出」；若一直失敗，請截圖此畫面告知工作人員。</p>
+    <div class="send-actions">
+      <button type="button" class="send-retry" id="sendRetry">重新送出</button>
+      <button type="button" class="send-back" id="sendBack">返回檢查答案</button>
+    </div>
+  </div>
+</dialog>
 <dialog class="share-dialog" id="shareDialog" aria-labelledby="shareTitle">
   <h2 class="share-sr-only" id="shareTitle">問卷填答海報</h2>
   <canvas id="sharePoster" width="1240" height="1754" role="img" aria-label="問卷填答海報"></canvas>
@@ -532,22 +549,40 @@ $('#form').addEventListener('submit', async e => {
   paused.forEach(([el]) => { el.disabled = true; });
   const btn = $('#submitBtn');
   btn.disabled = true; btn.firstChild.textContent = '送出中…';
-  let demo = !SCRIPT_URL;
+  sendDialog('busy');
+  let demo = !SCRIPT_URL, sent = false;
   try {
     if (!demo) {
       await SurveySessions.send(SCRIPT_URL, { sheet: `${current.short}_${PHASE_LABEL}`, row });
     } else {
       console.log('[示範模式] 未設定 SCRIPT_URL，以下為將送出的資料：', row);
     }
-    showDone(row['姓名'], demo);
+    sent = true;
   } catch (err) {
-    $('#formerr').textContent = '尚未完成收件確認：' + (err.name === 'AbortError' ? '連線逾時，請稍後重試。' : err.message || '請確認網路連線後重試。');
+    // 後台未確認收件就絕不顯示成功，改以視窗明確提醒。
+    const why = err.name === 'AbortError' ? '連線逾時。' : err.message || '網路連線中斷。';
+    $('#sendReason').textContent = why;
+    $('#formerr').textContent = '問卷尚未送出成功：' + why + '答案已保留，請重新送出。';
     $('#formerr').hidden = false;
+    sendDialog('fail');
   } finally {
     paused.forEach(([el, disabled]) => { el.disabled = disabled; });
     btn.disabled = false; btn.firstChild.textContent = '送出問卷';
   }
+  if (sent) { sendDialog(); showDone(row['姓名'], demo); }
 });
+
+function sendDialog(state) {
+  const dialog = $('#sendDialog');
+  if (!state) { if (dialog.open) dialog.close(); return; }
+  $('#sendBusy').hidden = state !== 'busy'; $('#sendFail').hidden = state !== 'fail';
+  if (!dialog.open) dialog.showModal();
+  if (state === 'fail') $('#sendRetry').focus();
+}
+// 送出中不能用 Esc 關閉視窗，避免學員以為已完成。
+$('#sendDialog').addEventListener('cancel', e => { if (!$('#sendBusy').hidden) e.preventDefault(); });
+$('#sendRetry').addEventListener('click', () => { sendDialog(); $('#form').requestSubmit(); });
+$('#sendBack').addEventListener('click', () => sendDialog());
 
 function showDone(name, demo) {
   $('#form').hidden = true; $('#progress').hidden = true;
