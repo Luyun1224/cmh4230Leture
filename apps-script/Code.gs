@@ -22,7 +22,7 @@ function ensureSheetSize(sh, rows, columns) {
   if (currentColumns < columns) sh.insertColumnsAfter(currentColumns, columns - currentColumns);
 }
 
-// 僅接受八張問卷工作表，防止問卷寫入課程清單或密碼管理。
+// 僅接受八張問卷工作表，防止問卷寫入課程清單或密碼管理；不因場次未建立而拒收。
 function doPost(e) {
   const lock = LockService.getScriptLock();
   let locked = false, token = '';
@@ -39,10 +39,18 @@ function doPost(e) {
     if (!match) throw new Error('不允許的工作表名稱');
     const row = data.row;
     if (!row || typeof row !== 'object' || Array.isArray(row)) throw new Error('問卷格式錯誤');
+    // 問卷永遠開放：場次ID有效就以清單為準；否則依學員填的上課日期收件，
+    // 當天恰好一場同課程場次時自動歸入，找不到就先留白，之後補建場次即可在儀表板自動配對。
     const sessionID = String(row['場次ID'] || '').trim();
-    const session = courseSessions().find(s => s['場次ID'] === sessionID && s['課程'] === match[1]);
-    if (!session || session['狀態'] === '取消' || session['開放填答'] !== '是') throw new Error('場次不存在或未開放填答');
-    // 以清單為準；時間戳記仍記錄實際收到問卷的時間。
+    const sessions = surveySessions().filter(s => s['課程'] === match[1] && s['狀態'] !== '取消');
+    let session = sessionID ? sessions.find(s => s['場次ID'] === sessionID) : null;
+    if (!session) {
+      const day = courseDay(row['上課日期']);
+      if (!day) throw new Error('請選擇上課日期');
+      const sameDay = sessions.filter(s => s['上課日期'] === day);
+      session = sameDay.length === 1 ? sameDay[0] : { '場次ID': '', '上課日期': day };
+    }
+    // 時間戳記仍記錄實際收到問卷的時間。
     row['場次ID'] = session['場次ID'];
     row['上課日期'] = session['上課日期'];
     row['問卷'] = match[2];
@@ -140,6 +148,11 @@ function courseSessions() {
       && ['預定', '已開課', '取消'].includes(r['狀態']));
 }
 
+// 課程清單缺漏或格式錯誤時仍要收問卷，不讓學員卡住。
+function surveySessions() {
+  try { return courseSessions(); } catch (err) { return []; }
+}
+
 function courseDay(value) {
   const m = String(value || '').match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})(?:$|[ T])/);
   if (!m) return '';
@@ -169,7 +182,7 @@ function setupCourseSheet() {
   sh.getRange('A1').setNote('場次ID須唯一。問卷已使用的ID請勿修改；同一天兩場也要用不同ID。');
   sh.getRange('E1').setNote('已開課請填實際學員人數；預定場次可填預計人數。留白表示尚未登記，0表示確定沒有學員。');
   sh.getRange('F1').setNote('只有「已開課」計入已開辦場次與學員人次；不會依日期自動判定。');
-  sh.getRange('G1').setNote('「是」可填前後測，不受填答日期限制；「否」停止新填答，既有資料仍參與分析。');
+  sh.getRange('G1').setNote('「是」會出現在問卷的日期選單；「否」只從選單隱藏，學員仍可自行選日期填寫，問卷永遠開放。');
   return sh;
 }
 

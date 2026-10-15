@@ -46,5 +46,5 @@ window.CourseSessions = (() => {
     return { held: held.length, planned: sessions.filter(s => s.status === '預定').length,
       students: held.reduce((n, s) => n + (s.count ?? 0), 0), missing: held.filter(s => s.count == null).length };
   }
-  return { SHEET, COURSES, read, label, resolve, stats };
+  return { SHEET, COURSES, read, label, resolve, stats, date };
 })();
