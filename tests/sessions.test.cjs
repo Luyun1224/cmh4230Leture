@@ -81,15 +81,13 @@ const token = '12345678-1234-4234-8234-123456789abc';
 function submit(ctx, session = 'early', sheet = '心臟超音波_前測') {
   return ctx.doPost({ postData: { contents: JSON.stringify({ sheet, receiptToken: token, row: { '場次ID': session, '姓名': '=untrusted text', '上課日期': '2026-10-10', '時間戳記': 'wrong-date', '信心': 4 } }) } });
 }
-test('public catalog excludes personal data, duplicate/closed/cancelled sessions; admin reads remain password protected', () => {
+test('public catalog excludes personal data, duplicate/closed/cancelled sessions; dashboard reads need no password but never return passwords', () => {
   const { context: ctx, sheets } = backend();
   const result = ctx.doGet({ parameter: { action: 'sessions', sheet: '密碼管理' } });
   assert.equal(result.ok, true); assert.equal(result.sessions.length, 1);
   assert.equal(result.sessions[0]['場次ID'], 'early');
   for (const key of ['學員人數', '姓名', '密碼']) assert.equal(Object.hasOwn(result.sessions[0], key), false);
-  assert.equal(ctx.doGet({ parameter: {} }).error, 'auth');
-  assert.equal(ctx.doGet({ parameter: { pw: 'wrong' } }).error, 'auth');
-  const admin = ctx.doGet({ parameter: { pw: 'test-only' } });
+  const admin = ctx.doGet({ parameter: {} });
   assert.equal(admin.ok, true); assert.equal(Object.hasOwn(admin.data, '密碼管理'), false);
   assert.equal(admin.data['課程清單'].length, 6);
   const date = new Date('2026-10-13T16:00:00Z');
@@ -171,7 +169,7 @@ test('management permission upgrade preserves passwords and login history withou
   const result = ctx.doPost({ postData: { contents: JSON.stringify({ action: 'admin-login', password: 'test-only', requestId: req }) } });
   assert.equal(result.ok, false); assert.equal(result.error, 'admin-auth');
   assert.equal(ctx.doGet({ parameter: { action: 'admin-login-result', requestId: req } }).error, 'admin-auth');
-  assert.equal(ctx.checkPassword('test-only'), true);
+  assert.equal(ctx.doGet({ parameter: {} }).ok, true);
 });
 test('management permission setup can upgrade a password sheet with fewer than 1000 rows and no spare column', () => {
   const { context: ctx, sheets } = backend(), sh = sheets.get('密碼管理');

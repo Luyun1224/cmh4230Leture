@@ -172,8 +172,6 @@ svg text{font-family:var(--f)}
 .gate-h{font-size:clamp(32px,8vw,44px)}
 .gate-h .w{display:block}
 .gate-l{font-weight:900;font-size:16px;margin-top:6px}
-#pw{font:inherit;font-size:18px;text-align:center;border:3px solid var(--ink);border-radius:14px;padding:10px 12px;background:var(--paper);letter-spacing:.2em}
-#pw:focus{outline:none;box-shadow:0 0 0 3px var(--pop),3px 3px 0 var(--ink)}
 .gate-btn{font-size:20px;padding:10px 0}
 .gate-err{background:#FCE3DC;border:2px solid var(--ink);border-radius:10px;padding:6px 10px;font-weight:700;font-size:14px;color:#8A2412}
 .gate-note{margin:0;font-size:12.5px;color:var(--muted)}
@@ -186,16 +184,13 @@ svg text{font-family:var(--f)}
 </head>
 <body>
 <section class="gate" id="gate">
-  <form class="gate-card" id="loginForm" autocomplete="off">
+  <form class="gate-card" id="loadForm" autocomplete="off">
     <div class="eyebrow">奇美醫院 臨床技能中心</div>
     <h1 class="gate-h"><span class="w">模擬課程</span>成效儀表板</h1>
-    <label class="gate-l" for="pw">請輸入儀表板密碼</label>
-    <input type="password" id="pw" placeholder="密碼" autocomplete="current-password">
-    <div class="gate-err" id="loginErr" hidden></div>
-    <button class="btn gate-btn" id="loginBtn" type="submit">進入儀表板</button>
+    <p class="gate-l" id="loadStatus" role="status">正在載入資料…</p>
+    <div class="gate-err" id="loadErr" hidden></div>
+    <button class="btn gate-btn" id="loadBtn" type="submit" hidden>重新載入</button>
     <button class="btn btn-ghost" id="adminEntry" type="button">管理者登入</button>
-    <p class="gate-note">密碼由中心管理者在 Google Sheet「密碼管理」分頁設定。</p>
-    <p class="gate-note" id="demoHint" hidden>預覽版：輸入任意文字即可查看示範資料。</p>
   </form>
 </section>
 
@@ -212,7 +207,6 @@ svg text{font-family:var(--f)}
         <span id="updated"></span>
         <button class="btn" id="reload" type="button">重新整理</button>
         <button class="btn" id="adminOpen" type="button">管理者登入</button>
-        <button class="btn btn-ghost" id="logout" type="button">登出</button>
       </div>
     </div>
     <nav class="tabs" role="tablist" id="tabs"></nav>
@@ -343,36 +337,31 @@ const fp = p => p == null ? '樣本不足' : p < .001 ? '< .001' : p.toFixed(3).
 let RAW = null, SOURCE = 'demo';
 const state = { tab: 'overview', id: '', ses: '' };
 
-let PW = '';
-const ss = { get(k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { v == null ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, v); } catch (e) {} } };
-
 // 向 GAS 取資料；回傳 { ok, data } 或 { ok:false, reason }
-async function fetchData(pw) {
+async function fetchData() {
   if (!GAS_URL) return { ok: true, data: demoData(), demo: true };
   try {
-    const r = await fetch(`${GAS_URL}${GAS_URL.includes('?') ? '&' : '?'}pw=${encodeURIComponent(pw)}&t=${Date.now()}`);
+    const r = await fetch(`${GAS_URL}${GAS_URL.includes('?') ? '&' : '?'}t=${Date.now()}`);
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const j = await r.json();
-    if (j && j.ok === false) return { ok: false, reason: j.error === 'auth' ? 'auth' : 'server', msg: j.error };
+    if (j && j.ok === false) return { ok: false, reason: 'server', msg: j.error };
     return { ok: true, data: j.data || j };
   } catch (e) { return { ok: false, reason: 'network', msg: String(e.message || e) }; }
 }
 
-async function login(e) {
+// 開啟頁面即載入資料，不需密碼；失敗時停在載入畫面並提供重試。
+async function enter(e) {
   if (e) e.preventDefault();
-  const pw = $('#pw').value.trim();
-  if (!pw) { showLoginErr('請輸入密碼'); return; }
-  $('#loginBtn').disabled = true; $('#loginBtn').textContent = '驗證中…';
-  const res = await fetchData(pw);
-  $('#loginBtn').disabled = false; $('#loginBtn').textContent = '進入儀表板';
+  $('#loadBtn').hidden = true; $('#loadErr').hidden = true; $('#loadStatus').textContent = '正在載入資料…';
+  const res = await fetchData();
   if (!res.ok) {
-    showLoginErr(res.reason === 'auth' ? '密碼不正確，請再試一次。' : '暫時無法連線到資料來源，請稍後再試。');
+    $('#loadStatus').textContent = '無法載入儀表板';
+    $('#loadErr').textContent = '暫時無法連線到資料來源，請稍後再試。'; $('#loadErr').hidden = false;
+    $('#loadBtn').hidden = false; $('#loadBtn').focus();
     return;
   }
-  PW = pw; ss.set('sim_dash_pw', pw);
   applyData(res);
 }
-function showLoginErr(t) { $('#loginErr').textContent = t; $('#loginErr').hidden = false; $('#pw').select(); }
 
 function applyData(res) {
   RAW = res.data; SOURCE = res.demo ? 'demo' : 'live';
@@ -390,20 +379,11 @@ async function load() {
     catch (error) { $('#srcText').textContent = '連線失敗'; $('#srcChip').className = 'chip demo'; }
     return;
   }
-  const res = await fetchData(PW);
+  const res = await fetchData();
   if (!res.ok) {
-    if (res.reason === 'auth') { logout('密碼已變更或停用，請重新登入。'); return; }
     $('#srcText').textContent = '連線失敗'; $('#srcChip').className = 'chip demo'; return;
   }
   applyData(res);
-}
-
-function logout(msg) {
-  CourseAdmin.logout(false);
-  PW = ''; ss.set('sim_dash_pw', null); RAW = null;
-  $('#app').hidden = true; $('#gate').hidden = false; $('#pw').value = '';
-  if (msg) showLoginErr(msg); else $('#loginErr').hidden = true;
-  $('#pw').focus();
 }
 
 function rowsFor(c, phase) {
@@ -923,15 +903,10 @@ function demoWorry(id, rnd) {
 }
 
 // ---------- boot ----------
-CourseAdmin.init({ url: GAS_URL, onData: applyData, onExit: () => { if (!PW) logout(); } });
+CourseAdmin.init({ url: GAS_URL, onData: applyData, onExit: () => { if (!RAW) enter(); } });
 (() => { const h = (location.hash || '').slice(1); if (h && (h === 'overview' || COURSES.some(c => c.id === h))) state.tab = h; })();
-$('#loginForm').addEventListener('submit', login);
-$('#logout').onclick = () => logout();
-if (!GAS_URL) $('#demoHint').hidden = false;
-(async () => {
-  const saved = ss.get('sim_dash_pw');
-  if (saved) { $('#pw').value = saved; await login(); } else { $('#pw').focus(); }
-})();
+$('#loadForm').addEventListener('submit', enter);
+enter();
 </script>
 
 </body>
