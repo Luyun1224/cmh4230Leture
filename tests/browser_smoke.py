@@ -43,7 +43,7 @@ class BrowserChecks(unittest.TestCase):
     def setUp(self):
         self.context = self.browser.new_context()
         self.page = self.context.new_page()
-        self.errors = []; self.sent = []; self.reject = False; self.catalog_fail = False
+        self.errors = []; self.sent = []; self.reject = False; self.catalog_fail = False; self.dashboard_fail = False
         self.post_drop = 0; self.never_received = False; self.receipt_checks = 0
         self.admin_catalog = copy.deepcopy(CATALOG); self.admin_versions = [0] * len(CATALOG)
         self.admin_token = 'abcdef01-1234-4234-8234-123456789abc'; self.admin_expired = False
@@ -90,6 +90,8 @@ class BrowserChecks(unittest.TestCase):
             got = not self.never_received and any(p.get('receiptToken') == token for p in self.sent)
             result = {'ok': not self.reject, 'received': got}
             if self.reject: result['error'] = '場次不存在或未開放填答'
+        elif not action:
+            result = {'ok': False, 'error': 'Error: 暫時無法讀取'} if self.dashboard_fail else {'ok': True, 'data': {'課程清單': copy.deepcopy(CATALOG)}}
         elif self.catalog_fail:
             result = {'ok': False, 'error': '清單尚未建立'}
         else:
@@ -239,8 +241,12 @@ class BrowserChecks(unittest.TestCase):
         self.post_drop = 0; self.never_received = False
         self.page.locator('#sendRetry').click(); self.page.locator('#done').wait_for(state='visible')
 
-    def apply_fixture(self):
+    def open_dashboard(self):
         self.page.goto(self.base + 'index.html')
+        self.page.locator('#app').wait_for(state='visible')
+
+    def apply_fixture(self):
+        self.open_dashboard()
         self.page.evaluate('''catalog => {
           const raw = demoData(); raw['課程清單'] = catalog;
           const pre = raw['心臟超音波_前測'][0], post = raw['心臟超音波_後測'][0];
@@ -270,10 +276,19 @@ class BrowserChecks(unittest.TestCase):
         self.page.locator('#fSes').select_option('__unassigned')
         self.assertEqual(self.page.evaluate("courseData(COURSES[0]).pairs.length"), 0)
         self.assertIn('未指定場次', self.page.locator('#view').inner_text())
-        self.page.locator('#logout').click(); self.assertTrue(self.page.locator('#loginForm').is_visible())
+
+    def test_dashboard_opens_without_password_and_retries_after_failure(self):
+        self.open_dashboard()
+        self.assertFalse(self.page.locator('#gate').is_visible()); self.assertEqual(self.page.locator('input[type=password]:visible').count(), 0)
+        self.assertTrue(all('pw=' not in url for url in self.read_urls))
+        self.assertIn('Google Sheet', self.page.locator('#srcText').inner_text())
+        self.dashboard_fail = True; self.page.goto(self.base + 'index.html')
+        self.page.locator('#loadBtn').wait_for(state='visible'); self.assertIn('無法連線', self.page.locator('#loadErr').inner_text())
+        self.dashboard_fail = False; self.page.locator('#loadBtn').click()
+        self.page.locator('#app').wait_for(state='visible')
 
     def test_missing_registry_and_all_demo_tabs_still_render(self):
-        self.page.goto(self.base + 'index.html')
+        self.open_dashboard()
         self.page.evaluate("applyData({data:demoData(),demo:true})")
         self.assertEqual(self.page.locator('#courseOpening tbody tr').count(), 4)
         for i in range(5):
@@ -296,13 +311,13 @@ class BrowserChecks(unittest.TestCase):
             self.apply_fixture(); self.admin_data = self.page.evaluate('RAW')
             self.page.locator('#adminOpen').click()
         else:
-            self.page.goto(self.base + 'index.html'); self.page.locator('#adminEntry').click()
+            self.open_dashboard(); self.page.locator('#adminOpen').click()
         self.page.locator('#adminPassword').fill('test-admin')
         self.page.locator('#adminLoginSubmit').click()
         self.page.wait_for_function('document.getElementById("adminMessage").textContent.includes("已登入")')
 
     def test_admin_login_permissions_and_credentials_stay_out_of_storage_and_get_urls(self):
-        self.page.goto(self.base + 'index.html'); self.page.locator('#adminEntry').click()
+        self.open_dashboard(); self.page.locator('#adminOpen').click()
         self.page.locator('#adminPassword').fill('wrong-fixture'); self.page.locator('#adminLoginSubmit').click()
         self.page.wait_for_function('document.getElementById("adminMessage").textContent.includes("密碼不正確")')
         self.assertFalse(self.page.locator('#adminWorkspace').is_visible()); self.assertEqual(self.manager_writes, [])

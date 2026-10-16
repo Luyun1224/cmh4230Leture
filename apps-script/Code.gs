@@ -106,7 +106,7 @@ function doGet(e) {
       return json({ ok: true, sessions });
     } catch (err) { return json({ ok: false, error: String(err) }); }
   }
-  if (!checkPassword(p.pw)) return json({ ok: false, error: 'auth' });
+  // 儀表板不需密碼即可讀取；密碼分頁仍由 dashboardData 排除。
   return json({ ok: true, data: dashboardData(p.sheet) });
 }
 
@@ -213,7 +213,6 @@ function passwordRecord(pw, admin = false) {
 function stampLogin(record) {
   record.sh.getRange(record.row, 4, 1, 2).setValues([[Utilities.formatDate(new Date(), TZ, 'yyyy/MM/dd HH:mm:ss'), (Number(record.count) || 0) + 1]]);
 }
-function checkPassword(pw) { const record = passwordRecord(pw); if (!record) return false; stampLogin(record); return true; }
 
 function requireAdmin(token) {
   if (!requestID(token)) adminError('admin-auth', '管理者登入已過期，請重新登入。');
