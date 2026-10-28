@@ -277,6 +277,32 @@ class BrowserChecks(unittest.TestCase):
         self.assertEqual(self.page.evaluate("courseData(COURSES[0]).pairs.length"), 0)
         self.assertIn('未指定場次', self.page.locator('#view').inner_text())
 
+    def test_rank_analysis_uses_matched_scores_and_excludes_changed_ranks(self):
+        self.apply_fixture()
+        result = self.page.evaluate("""() => {
+          const c = COURSES.find(c => c.id === 'lap');
+          const make = (id, score, ready) => ({'身分': id, 'score': score, '臨床準備度': ready});
+          const pairs = [
+            {pre: make('UGY', 1, 2), post: make('UGY', 3, 3)},
+            {pre: make('PGY1', 3, 3), post: make('PGY1', 4, 3)},
+            {pre: make('UGY', 1, 1), post: make('PGY1', 5, 5)},
+            {pre: make('UGY', null, 2), post: make('UGY', 5, null)}
+          ];
+          return rankAnalysis({c, pairs, pre: pairs.map(p=>p.pre), post: pairs.map(p=>p.post), confMean:r=>r.score});
+        }""")
+        self.page.locator('#view').evaluate('(el, html) => el.innerHTML = html', result)
+        rows = self.page.locator('#view tbody tr')
+        self.assertEqual(rows.nth(0).locator('td').all_text_contents(), ['UGY','3／2','1','1.00 → 3.00','+2.00','1','2.00 → 3.00','+1.00'])
+        self.assertEqual(rows.nth(1).locator('td').all_text_contents(), ['PGY1','1／2','1','3.00 → 4.00','+1.00','1','3.00 → 3.00','0.00'])
+        self.assertIn('技能信心提升差 +1.00', self.page.locator('#view').inner_text())
+        self.assertIn('1 組配對', self.page.locator('#view').inner_text())
+        self.page.evaluate("applyData({data:demoData(),demo:true})")
+        self.page.locator('[data-t="lap"]').click()
+        self.assertIn('不同職級學習成效與差異', self.page.locator('#view').inner_text())
+        rank = self.page.evaluate("courseData(COURSES.find(c=>c.id==='lap')).pre[0]['身分']")
+        self.page.locator('#fId').select_option(rank)
+        self.assertIn('目前只有一個職級', self.page.locator('#view').inner_text())
+
     def test_dashboard_opens_without_password_and_retries_after_failure(self):
         self.open_dashboard()
         self.assertFalse(self.page.locator('#gate').is_visible()); self.assertEqual(self.page.locator('input[type=password]:visible').count(), 0)

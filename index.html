@@ -664,7 +664,37 @@ function viewCourse(c) {
   const fbCards = `<div class="grid g2">${c.career
     ? addI(card('課前想讓老師知道的', '前測選填，依身分與日期顯示，不列姓名', fbList(helpKey, helpSrc)), nHelp ? `共 ${nHelp} 位學員在課前留言，可在上課前轉給講師參考。` : '')
     : addI(card('最有幫助的內容', '後測簡答，依身分與日期顯示，不列姓名', fbList(helpKey, helpSrc)), nHelp ? `共收到 ${nHelp} 則回饋，可從中找出學員最有感的教學方式，作為課程的固定亮點。` : '')}${addI(card('回饋與建議', '學員想開的課程與想說的話', fbList('回饋與建議')), nFb ? `共 ${nFb} 位學員留言（${pct(nFb, d.post.length)}），其中提到的新課程需求可作為中心下一步開課的參考。` : '')}</div>`;
-  return `<div class="grid">${kpis}${addI(skillChart, iSkill)}<div class="grid g2">${addI(satCard, iSat2)}${addI(readyCard, iReady)}</div><div class="grid g2">${addI(bg, iBg)}${addI(expect, iExp)}</div>${c.career ? lapTopics(d) : ''}${addI(track, iTrack)}${fbCards}</div>`;
+  return `<div class="grid">${kpis}${rankAnalysis(d)}${addI(skillChart, iSkill)}<div class="grid g2">${addI(satCard, iSat2)}${addI(readyCard, iReady)}</div><div class="grid g2">${addI(bg, iBg)}${addI(expect, iExp)}</div>${c.career ? lapTopics(d) : ''}${addI(track, iTrack)}${fbCards}</div>`;
+}
+
+function rankAnalysis(d) {
+  const rank = r => String(r['身分'] || '').trim() || '未填職級';
+  const labels = [...new Set([...d.pre, ...d.post].map(rank))];
+  labels.sort((a, b) => (IDS.includes(a) ? IDS.indexOf(a) : IDS.length) - (IDS.includes(b) ? IDS.indexOf(b) : IDS.length) || a.localeCompare(b));
+  const conflicts = d.pairs.filter(p => rank(p.pre) !== rank(p.post)).length;
+  const metric = (pairs, score) => {
+    const values = pairs.map(p => [score(p.pre), score(p.post)]).filter(v => v.every(x => x != null && Number.isFinite(x)));
+    return { n: values.length, pre: mean(values.map(v => v[0])), post: mean(values.map(v => v[1])), delta: mean(values.map(v => v[1] - v[0])) };
+  };
+  const groups = labels.map(id => {
+    const pairs = d.pairs.filter(p => rank(p.pre) === id && rank(p.post) === id);
+    return { id, pre: d.pre.filter(r => rank(r) === id).length, post: d.post.filter(r => rank(r) === id).length,
+      confidence: metric(pairs, d.confMean), readiness: metric(pairs, r => num(r['臨床準備度'])) };
+  });
+  const rows = groups.map(g => `<tr><td>${esc(g.id)}</td><td class="n">${g.pre}／${g.post}</td>${[g.confidence, g.readiness].map(m => `<td class="n">${m.n}</td><td class="n">${f1(m.pre)} → ${f1(m.post)}</td><td class="n">${fd(m.delta)}</td>`).join('')}</tr>`).join('');
+  const comparisons = [];
+  for (let i = 0; i < groups.length; i++) for (let j = i + 1; j < groups.length; j++) {
+    const a = groups[i], b = groups[j];
+    const differences = [['技能信心', 'confidence'], ['臨床準備度', 'readiness']].map(([label, key]) => {
+      const x = a[key], y = b[key];
+      return x.n && y.n ? `${label}提升差 ${fd(x.delta - y.delta)} 分（配對 ${x.n}／${y.n} 人次）` : `${label}配對資料不足`;
+    });
+    comparisons.push(`<li>${esc(a.id)} 相較 ${esc(b.id)}：${differences.join('；')}。</li>`);
+  }
+  return card('不同職級學習成效與差異', '依目前身分與場次篩選，比較同一課程各職級的自評成效（1–5 分）。選擇「全部」身分可比較不同職級。',
+    groups.length ? `<div class="tw"><table><thead><tr><th>職級</th><th class="n">前／後測份數</th><th class="n">信心有效配對</th><th class="n">信心前 → 後</th><th class="n">信心提升</th><th class="n">準備度有效配對</th><th class="n">準備度前 → 後</th><th class="n">準備度提升</th></tr></thead><tbody>${rows}</tbody></table></div>
+      ${comparisons.length ? `<ul>${comparisons.join('')}</ul>` : '<p class="empty">目前只有一個職級，尚無法比較職級差異。</p>'}
+      <div class="note">前後平均與提升均使用該指標有效的同一人、同一場次配對；缺測不當作零分。同一學員參加不同場次計為不同人次。前後職級不一致的 ${conflicts} 組配對不納入職級成效。未填職級單獨列出。提升差為前者減後者，僅為描述性比較；樣本少、起始程度與場次組成可能影響結果，不能據此判定統計顯著、因果或客觀技能表現。</div>` : '<p class="empty">尚無職級資料可供分析。</p>');
 }
 
 // ---------- components ----------
