@@ -96,6 +96,36 @@ select{font:inherit;font-size:14px;font-weight:700;border:2.5px solid var(--ink)
 .kpi b{display:block;font-size:clamp(24px,2.6vw,32px);font-weight:900;color:var(--ink);line-height:1.2;margin-top:6px;letter-spacing:.01em}
 .kpi b small{font-size:14px;color:var(--ink-2);font-weight:700}
 .kpi em{display:block;font-style:normal;font-size:12.5px;color:var(--ink-2);font-weight:500}
+/* 開課場次大字看板 */
+.op{display:flex;flex-direction:column;gap:18px;margin-top:6px}
+.op-total{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.op-big{border:3px solid var(--ink);border-radius:18px;padding:14px 18px 14px;box-shadow:var(--sh);min-width:0;display:flex;flex-direction:column;gap:2px}
+.op-big span{align-self:flex-start;font-size:clamp(15px,1.6vw,19px);font-weight:900;color:#fff;background:var(--ink);border-radius:8px;padding:1px 12px;letter-spacing:.06em}
+.op-big b{display:flex;align-items:baseline;gap:8px;line-height:1;margin:8px 0 4px;font-variant-numeric:tabular-nums}
+.op-big b i{font-style:normal;font-weight:900;font-size:clamp(64px,9vw,112px);letter-spacing:-.01em;color:var(--pop);-webkit-text-stroke:7px var(--ink);paint-order:stroke fill;text-shadow:4px 5px 0 var(--ink)}
+.op-big b small{font-size:clamp(20px,2.4vw,30px);font-weight:900;color:var(--ink)}
+.op-big em{font-style:normal;font-size:clamp(13px,1.3vw,16px);font-weight:700;color:var(--ink-2)}
+.op-held{background:var(--ground)}.op-held b small,.op-held em{color:#fff}
+.op-held b i{color:#fff}
+.op-students{background:var(--paper)}
+.op-planned{background:var(--pop)}.op-planned b i{color:#fff}
+.op-courses{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.op-c{border:3px solid var(--ink);border-radius:16px;padding:12px 14px;background:var(--card);min-width:0;display:flex;flex-direction:column;gap:8px}
+.op-c h3{margin:0;display:flex;align-items:center;gap:8px;font-size:clamp(17px,1.7vw,21px);font-weight:900}
+.op-c h3 .cc-no{font-size:16px;padding:0 6px}
+.op-c dl{margin:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.op-cell{text-align:center;border-radius:10px;padding:4px 2px;background:var(--bg)}
+.op-cell dt{font-size:13px;font-weight:900;color:var(--ink-2)}
+.op-cell dd{margin:0;font-size:13px;font-weight:900;white-space:nowrap}
+.op-cell dd b{font-size:clamp(28px,3.2vw,40px);line-height:1.1;font-variant-numeric:tabular-nums}
+.op-cell[data-k="held"] dd b{color:var(--ground-deep)}
+.op-cell[data-k="planned"] dd b{color:var(--post)}
+.op-next{margin:0;font-size:13.5px;font-weight:700;color:var(--ink-2);min-height:1.5em;display:flex;flex-wrap:wrap;gap:4px 10px}
+.op-next b{color:var(--ink)}
+.op-warn{font-style:normal;font-weight:900;color:var(--warn)}
+@media (max-width:1000px){.op-courses{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:640px){.op-total{grid-template-columns:1fr}.op-big b i{-webkit-text-stroke:5px var(--ink)}}
+@media (max-width:420px){.op-courses{grid-template-columns:1fr}}
 .up{color:var(--good)!important}.down{color:var(--bad)!important}
 
 .ccards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
@@ -465,13 +495,35 @@ function render() {
 }
 
 // ---------- overview ----------
+// 開課場次大字看板：現場報告時一眼看到「已開幾場、教了多少人、接下來還有幾場」。
+function openingBoard(sessions) {
+  const today = new Date().toLocaleDateString('sv-SE', { timeZone: TZ });
+  const md = d => d.slice(5).replace('-', '/').replace(/^0/, '').replace('/0', '/');
+  const nextOf = list => list.filter(s => s.status === '預定' && s.date >= today)[0] || null;
+  const all = CourseSessions.stats(sessions), next = nextOf(sessions);
+  const stuNote = n => n ? `<em class="op-warn">${n} 場人數待填</em>` : '';
+  const big = (k, label, val, unit, note) => `<div class="op-big op-${k}" data-k="${k}"><span>${label}</span><b><i>${val}</i> <small>${unit}</small></b>${note || ''}</div>`;
+  const total = `<div class="op-total">
+    ${big('held', '已開辦', all.held, '場', '<em>四門課合計</em>')}
+    ${big('students', '累計學員', all.students, '人次', stuNote(all.missing) || '<em>已開課場次加總</em>')}
+    ${big('planned', '接下來預定', all.planned, '場', next ? `<em>最近一場：${md(next.date)} ${COURSES.find(c => c.id === next.course).short}</em>` : '<em>目前無排定場次</em>')}
+  </div>`;
+  const courses = `<div class="op-courses">${COURSES.map((c, i) => {
+    const list = sessions.filter(x => x.course === c.id), st = CourseSessions.stats(list), nx = nextOf(list);
+    const cell = (k, label, val, unit) => `<div class="op-cell" data-k="${k}"><dt>${label}</dt><dd><b>${val}</b> ${unit}</dd></div>`;
+    return `<div class="op-c" data-course="${c.id}">
+      <h3><span class="cc-no">${String(i + 1).padStart(2, '0')}</span>${c.short}</h3>
+      <dl>${cell('held', '已開辦', st.held, '場')}${cell('students', '學員', st.students, '人次')}${cell('planned', '預定', st.planned, '場')}</dl>
+      <p class="op-next">${st.missing ? `<em class="op-warn">${st.missing} 場人數待填</em>` : ''}${nx ? `下一場 <b>${md(nx.date)}${nx.time ? ' ' + esc(nx.time) : ''}</b>` : (st.planned ? '' : '尚無預定場次')}</p>
+    </div>`;
+  }).join('')}</div>`;
+  return `<div id="courseOpening" class="op">${total}${courses}</div>`;
+}
 function viewOverview() {
   const D = COURSES.map(c => courseData(c));
   const registry = CourseSessions.read(RAW[CourseSessions.SHEET] || []);
   const opening = card('開課場次與學員人數', '依 Sheet「課程清單」統計；學員人次為已開課場次的學員人數加總，同一人參加兩場計兩人次。此區不隨問卷身分篩選改變。', `
-    <div class="tw"><table id="courseOpening"><thead><tr><th>模擬課程</th><th class="n">已開辦場次</th><th class="n">學員人次</th><th class="n">預定場次</th></tr></thead><tbody>
-    ${COURSES.map(c => { const s = CourseSessions.stats(registry.sessions.filter(x => x.course === c.id)); return `<tr><td><b>${c.short}</b></td><td class="n">${s.held} 場</td><td class="n">${s.missing ? `${s.students} 人次（${s.missing} 場待填）` : `${s.students} 人次`}</td><td class="n">${s.planned} 場</td></tr>`; }).join('')}
-    </tbody></table></div>
+    ${openingBoard(registry.sessions)}
     ${registry.sessions.length ? `<details style="margin-top:16px"><summary>查看場次清單與填答連結</summary><div class="tw"><table><thead><tr><th>課程</th><th>場次</th><th>狀態</th><th class="n">學員人數</th><th>填答連結</th></tr></thead><tbody>${registry.sessions.map(s => `<tr><td>${COURSES.find(c => c.id === s.course).short}</td><td>${esc(CourseSessions.label(s))}</td><td>${s.status}</td><td class="n">${s.count ?? '待填'}</td><td>${s.open && s.status !== '取消' ? ['pretest', 'posttest'].map((page, i) => `<a target="_blank" rel="noopener" href="https://luyun1224.github.io/cmh4230Leture/${page}.html?course=${s.course}&amp;session=${encodeURIComponent(s.id)}">${i === 0 ? '前測' : '後測'}</a>`).join(' ／ ') : '未開放'}</td></tr>`).join('')}</tbody></table></div></details>` : ''}
     ${!registry.sessions.length ? '<p class="note">尚無有效課程清單，請在 Sheet 新增各課程的上課場次；不會以問卷填答日期推算場次。</p>' : ''}
     ${registry.issues.length ? `<p class="note" role="alert">課程清單需要修正：${registry.issues.map(esc).join('；')}</p>` : ''}
