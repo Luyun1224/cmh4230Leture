@@ -258,12 +258,20 @@ class BrowserChecks(unittest.TestCase):
           applyData({data:raw,demo:true});
         }''', CATALOG)
 
+    def opening(self, course=None):
+        """開課看板的「已開辦／學員／預定」數字；不給課程時讀上方總數。"""
+        scope = f'#courseOpening .op-c[data-course="{course}"] .op-cell' if course else '#courseOpening .op-big'
+        texts = self.page.locator(scope).evaluate_all("els => els.map(e => e.querySelector('dd, b').textContent.replace(/\\s+/g, ' ').trim())")
+        return texts
+
     def test_overview_registry_counts_and_session_pairing(self):
         self.apply_fixture()
-        row = self.page.locator('#courseOpening tbody tr').first
-        self.assertEqual(row.locator('td').all_text_contents(), ['心臟超音波','3 場','14 人次（1 場待填）','1 場'])
-        before = row.inner_text(); self.page.locator('#fId').select_option('PGY2')
-        self.assertEqual(row.inner_text(), before)
+        row = self.page.locator('#courseOpening .op-c[data-course="echo"]')
+        self.assertEqual(self.opening('echo'), ['3 場','14 人次','1 場'])
+        self.assertIn('1 場人數待填', row.inner_text())
+        self.assertEqual(self.opening(), ['4 場','14 人次','1 場'])
+        before = self.page.locator('#courseOpening').inner_text(); self.page.locator('#fId').select_option('PGY2')
+        self.assertEqual(self.page.locator('#courseOpening').inner_text(), before)
         self.page.locator('#fId').select_option('')
         self.assertEqual(self.page.evaluate("courseData(COURSES[0]).pairs.length"), 2)
         self.assertEqual(self.page.evaluate("courseData(COURSES[0]).pre.length"), 4)
@@ -316,7 +324,7 @@ class BrowserChecks(unittest.TestCase):
     def test_missing_registry_and_all_demo_tabs_still_render(self):
         self.open_dashboard()
         self.page.evaluate("applyData({data:demoData(),demo:true})")
-        self.assertEqual(self.page.locator('#courseOpening tbody tr').count(), 4)
+        self.assertEqual(self.page.locator('#courseOpening .op-c').count(), 4)
         for i in range(5):
             self.page.locator('#tabs button').nth(i).click()
             self.assertGreater(len(self.page.locator('#view').inner_text()), 100)
@@ -369,7 +377,7 @@ class BrowserChecks(unittest.TestCase):
         self.assertEqual(self.manager_writes[-1]['session']['學員人數'], '10')
         self.assertEqual(self.page.locator('#adminDate').input_value(), '')
         self.page.locator('#adminClose').click()
-        self.assertEqual(self.page.locator('#courseOpening tbody tr').nth(2).locator('td').all_text_contents(), ['腹部超音波','1 場','10 人次','0 場'])
+        self.assertEqual(self.opening('abd'), ['1 場','10 人次','0 場'])
 
     def test_admin_can_edit_date_zero_students_and_close_answers_without_changing_identity(self):
         self.admin_login(); self.page.locator('[data-admin-row="2"]').click()
