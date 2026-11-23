@@ -200,8 +200,8 @@ class BrowserChecks(unittest.TestCase):
         self.page.locator('#done').wait_for(state='visible')
         self.assertEqual(self.sent[-1]['row']['上課日期'], '2026-11-06'); self.assertEqual(self.sent[-1]['sheet'], '腹腔鏡_前測')
 
-    def test_acls_vr_surveys_and_dashboard(self):
-        self.page.goto(self.base + 'pretest.html?course=acls')
+    def test_vr_surveys_and_dashboard(self):
+        self.page.goto(self.base + 'pretest.html?course=vr')
         self.page.wait_for_function('document.getElementById("sessionHint").textContent.includes("請選擇實際上課的日期")')
         self.assertEqual(self.page.locator('#sessionSelect').input_value(), '__date'); self.page.locator('#sessionDate').fill('2026-12-01')
         self.assertEqual(self.page.evaluate("questions.find(q=>q.k==='身分').opts"), ['UGY', 'PGY1', 'PGY2'])
@@ -213,25 +213,25 @@ class BrowserChecks(unittest.TestCase):
         self.fill_answers(); self.page.locator('#submitBtn').click()
         self.page.locator('#done').wait_for(state='visible')
         sent = self.sent[-1]; row = sent['row']
-        self.assertEqual(sent['sheet'], 'ACLS VR_前測')
+        self.assertEqual(sent['sheet'], 'VR_前測')
         self.assertEqual(len([k for k in row if k.startswith('信心｜')]), 7)
         for key in ('曾完成之急救訓練', 'VR使用經驗', '臨床準備度'): self.assertIn(key, row)
-        self.page.goto(self.base + 'posttest.html?course=acls')
+        self.page.goto(self.base + 'posttest.html?course=vr')
         self.page.wait_for_function('document.getElementById("sessionHint").textContent.includes("請選擇實際上課的日期")')
         self.assertEqual(self.page.locator('#sessionSelect').input_value(), '__date'); self.page.locator('#sessionDate').fill('2026-12-01')
         self.fill_answers(); self.page.locator('#submitBtn').click()
         self.page.locator('#done').wait_for(state='visible')
         sent = self.sent[-1]; row = sent['row']
-        self.assertEqual(sent['sheet'], 'ACLS VR_後測')
+        self.assertEqual(sent['sheet'], 'VR_後測')
         self.assertEqual(len([k for k in row if k.startswith('滿意度｜')]), 11)
         self.assertIn('滿意度｜講師的示範與回饋清楚、具體且有幫助', row)
         for key in ('VR不適', '回饋與建議', '臨床準備度'): self.assertIn(key, row)
         self.open_dashboard()
         self.page.evaluate("applyData({data:demoData(),demo:true})")
-        self.page.locator('[data-t="acls"]').click()
+        self.page.locator('[data-t="vr"]').click()
         text = self.page.locator('#view').inner_text()
         for label in ('VR 不適反應', '臨場感', '曾完成之急救訓練', '最有幫助的部分或需要改進的地方'): self.assertIn(label, text)
-        self.assertIsNotNone(self.page.evaluate("courseData(COURSES.find(c=>c.id==='acls')).overall"))
+        self.assertIsNotNone(self.page.evaluate("courseData(COURSES.find(c=>c.id==='vr')).overall"))
 
     def test_rejected_receipt_keeps_answers_and_reuses_token(self):
         self.page.goto(self.base + 'posttest.html?course=echo&session=echo-A')

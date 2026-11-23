@@ -7,7 +7,7 @@
 const PW_SHEET = '密碼管理';
 const COURSE_SHEET = '課程清單';
 const TZ = 'Asia/Taipei';
-const COURSE_NAMES = ['心臟超音波', '內視鏡', '腹部超音波', '腹腔鏡', 'ACLS VR'];
+const COURSE_NAMES = ['心臟超音波', '內視鏡', '腹部超音波', '腹腔鏡', 'VR'];
 const COURSE_HEADERS = ['場次ID', '課程', '上課日期', '開始時間', '學員人數', '狀態', '開放填答'];
 const ADMIN_HEADER = '管理課程（是／否）';
 const ADMIN_SECONDS = 1800;
@@ -35,7 +35,7 @@ function doPost(e) {
     const previous = CacheService.getScriptCache().get('receipt:' + token);
     if (previous && JSON.parse(previous).ok) return json({ ok: true });
     const name = String(data.sheet || '');
-    const match = name.match(/^(心臟超音波|內視鏡|腹部超音波|腹腔鏡|ACLS VR)_(前測|後測)$/);
+    const match = name.match(/^(心臟超音波|內視鏡|腹部超音波|腹腔鏡|VR)_(前測|後測)$/);
     if (!match) throw new Error('不允許的工作表名稱');
     const row = data.row;
     if (!row || typeof row !== 'object' || Array.isArray(row)) throw new Error('問卷格式錯誤');
