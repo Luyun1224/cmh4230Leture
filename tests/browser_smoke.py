@@ -200,6 +200,39 @@ class BrowserChecks(unittest.TestCase):
         self.page.locator('#done').wait_for(state='visible')
         self.assertEqual(self.sent[-1]['row']['上課日期'], '2026-11-06'); self.assertEqual(self.sent[-1]['sheet'], '腹腔鏡_前測')
 
+    def test_acls_vr_surveys_and_dashboard(self):
+        self.page.goto(self.base + 'pretest.html?course=acls')
+        self.page.wait_for_function('document.getElementById("sessionHint").textContent.includes("請選擇實際上課的日期")')
+        self.assertEqual(self.page.locator('#sessionSelect').input_value(), '__date'); self.page.locator('#sessionDate').fill('2026-12-01')
+        self.assertEqual(self.page.evaluate("questions.find(q=>q.k==='身分').opts"), ['UGY', 'PGY1', 'PGY2'])
+        training = self.page.locator('#q-3 .chips label')
+        training.nth(0).click(); training.nth(1).click(); training.nth(2).click()
+        self.assertEqual(self.page.evaluate("valueOf(questions.find(q=>q.k==='曾完成之急救訓練'))"), ['皆未曾受訓'])
+        training.nth(1).click()
+        self.assertEqual(self.page.evaluate("valueOf(questions.find(q=>q.k==='曾完成之急救訓練'))"), ['ACLS'])
+        self.fill_answers(); self.page.locator('#submitBtn').click()
+        self.page.locator('#done').wait_for(state='visible')
+        sent = self.sent[-1]; row = sent['row']
+        self.assertEqual(sent['sheet'], 'ACLS VR_前測')
+        self.assertEqual(len([k for k in row if k.startswith('信心｜')]), 7)
+        for key in ('曾完成之急救訓練', 'VR使用經驗', '臨床準備度'): self.assertIn(key, row)
+        self.page.goto(self.base + 'posttest.html?course=acls')
+        self.page.wait_for_function('document.getElementById("sessionHint").textContent.includes("請選擇實際上課的日期")')
+        self.assertEqual(self.page.locator('#sessionSelect').input_value(), '__date'); self.page.locator('#sessionDate').fill('2026-12-01')
+        self.fill_answers(); self.page.locator('#submitBtn').click()
+        self.page.locator('#done').wait_for(state='visible')
+        sent = self.sent[-1]; row = sent['row']
+        self.assertEqual(sent['sheet'], 'ACLS VR_後測')
+        self.assertEqual(len([k for k in row if k.startswith('滿意度｜')]), 11)
+        self.assertIn('滿意度｜講師的示範與回饋清楚、具體且有幫助', row)
+        for key in ('VR不適', '回饋與建議', '臨床準備度'): self.assertIn(key, row)
+        self.open_dashboard()
+        self.page.evaluate("applyData({data:demoData(),demo:true})")
+        self.page.locator('[data-t="acls"]').click()
+        text = self.page.locator('#view').inner_text()
+        for label in ('VR 不適反應', '臨場感', '曾完成之急救訓練', '最有幫助的部分或需要改進的地方'): self.assertIn(label, text)
+        self.assertIsNotNone(self.page.evaluate("courseData(COURSES.find(c=>c.id==='acls')).overall"))
+
     def test_rejected_receipt_keeps_answers_and_reuses_token(self):
         self.page.goto(self.base + 'posttest.html?course=echo&session=echo-A')
         self.page.wait_for_function('document.getElementById("sessionSelect").value==="echo-A"')
@@ -324,8 +357,8 @@ class BrowserChecks(unittest.TestCase):
     def test_missing_registry_and_all_demo_tabs_still_render(self):
         self.open_dashboard()
         self.page.evaluate("applyData({data:demoData(),demo:true})")
-        self.assertEqual(self.page.locator('#courseOpening .op-c').count(), 4)
-        for i in range(5):
+        self.assertEqual(self.page.locator('#courseOpening .op-c').count(), 5)
+        for i in range(6):
             self.page.locator('#tabs button').nth(i).click()
             self.assertGreater(len(self.page.locator('#view').inner_text()), 100)
         self.page.evaluate("const raw=demoData(); delete raw['課程清單']; state.tab='overview'; applyData({data:raw,demo:true})")

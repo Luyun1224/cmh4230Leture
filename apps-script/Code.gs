@@ -7,7 +7,7 @@
 const PW_SHEET = '密碼管理';
 const COURSE_SHEET = '課程清單';
 const TZ = 'Asia/Taipei';
-const COURSE_NAMES = ['心臟超音波', '內視鏡', '腹部超音波', '腹腔鏡'];
+const COURSE_NAMES = ['心臟超音波', '內視鏡', '腹部超音波', '腹腔鏡', 'ACLS VR'];
 const COURSE_HEADERS = ['場次ID', '課程', '上課日期', '開始時間', '學員人數', '狀態', '開放填答'];
 const ADMIN_HEADER = '管理課程（是／否）';
 const ADMIN_SECONDS = 1800;
@@ -22,7 +22,7 @@ function ensureSheetSize(sh, rows, columns) {
   if (currentColumns < columns) sh.insertColumnsAfter(currentColumns, columns - currentColumns);
 }
 
-// 僅接受八張問卷工作表，防止問卷寫入課程清單或密碼管理；不因場次未建立而拒收。
+// 僅接受各課程的前後測問卷工作表，防止問卷寫入課程清單或密碼管理；不因場次未建立而拒收。
 function doPost(e) {
   const lock = LockService.getScriptLock();
   let locked = false, token = '';
@@ -35,7 +35,7 @@ function doPost(e) {
     const previous = CacheService.getScriptCache().get('receipt:' + token);
     if (previous && JSON.parse(previous).ok) return json({ ok: true });
     const name = String(data.sheet || '');
-    const match = name.match(/^(心臟超音波|內視鏡|腹部超音波|腹腔鏡)_(前測|後測)$/);
+    const match = name.match(/^(心臟超音波|內視鏡|腹部超音波|腹腔鏡|ACLS VR)_(前測|後測)$/);
     if (!match) throw new Error('不允許的工作表名稱');
     const row = data.row;
     if (!row || typeof row !== 'object' || Array.isArray(row)) throw new Error('問卷格式錯誤');
@@ -161,11 +161,11 @@ function courseDay(value) {
   return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
 }
 
-// 已存在就直接回傳，重跑不覆寫清單或插入假場次。
+// 已存在就只更新「課程」下拉選單（新增課程時重跑即可），不覆寫清單或插入假場次。
 function setupCourseSheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sh = ss.getSheetByName(COURSE_SHEET);
-  if (sh) return sh;
+  if (sh) { courseValidation(sh); return sh; }
   sh = ss.insertSheet(COURSE_SHEET);
   sh.getRange(1, 1, 1, COURSE_HEADERS.length).setValues([COURSE_HEADERS])
     .setFontWeight('bold').setBackground('#1B1410').setFontColor('#FFD84D');
@@ -173,8 +173,7 @@ function setupCourseSheet() {
   sh.getRange('C2:C1000').setNumberFormat('yyyy-mm-dd');
   sh.getRange('D2:D1000').setNumberFormat('@');
   sh.getRange('E2:E1000').setNumberFormat('0');
-  const validation = SpreadsheetApp.newDataValidation();
-  sh.getRange('B2:B1000').setDataValidation(validation.requireValueInList(COURSE_NAMES, true).setAllowInvalid(false).build());
+  courseValidation(sh);
   sh.getRange('E2:E1000').setDataValidation(SpreadsheetApp.newDataValidation().requireFormulaSatisfied('=OR(ISBLANK(E2),AND(ISNUMBER(E2),E2>=0,MOD(E2,1)=0))').setAllowInvalid(false).build());
   sh.getRange('F2:F1000').setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['預定', '已開課', '取消'], true).setAllowInvalid(false).build());
   sh.getRange('G2:G1000').setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['是', '否'], true).setAllowInvalid(false).build());
@@ -302,7 +301,7 @@ function validCourseSession(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) adminError('validation', '課程資料格式錯誤。');
   const session = Object.fromEntries(COURSE_HEADERS.map(h => [h, String(valueOrEmpty(input[h])).trim()]));
   if (!session['場次ID'] || session['場次ID'].length > 80 || /^[=+@-]/.test(session['場次ID']) || /[\x00-\x1f\x7f]/.test(session['場次ID'])) adminError('validation', '請填寫有效的場次ID（最多80字，不可以公式符號開頭）。');
-  if (!COURSE_NAMES.includes(session['課程'])) adminError('validation', '請選擇四門模擬課程之一。');
+  if (!COURSE_NAMES.includes(session['課程'])) adminError('validation', '請選擇課程清單中的模擬課程。');
   const day = courseDay(session['上課日期']);
   if (!day) adminError('validation', '請填寫有效的上課日期。');
   session['上課日期'] = day;
@@ -361,6 +360,9 @@ function setupPasswordSheet() {
   sh.setColumnWidths(1, 5, 160); sh.setFrozenRows(1);
   sh.getRange('G1').setValue('說明：每一列是一組可登入儀表板的密碼。新增密碼＝新增一列；暫停使用＝「啟用」改成「否」；D、E 欄會自動記錄。').setFontColor('#7D6A5C');
   return sh;
+}
+function courseValidation(sh) {
+  sh.getRange('B2:B1000').setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(COURSE_NAMES, true).setAllowInvalid(false).build());
 }
 function archiveLapSheets() { archiveCourseSheets('腹腔鏡'); }
 function archiveCourseSheets(course) {

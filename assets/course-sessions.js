@@ -6,6 +6,7 @@ window.CourseSessions = (() => {
     { id: 'endo', short: '內視鏡', name: '內視鏡模擬課程' },
     { id: 'abd', short: '腹部超音波', name: '腹部超音波課程' },
     { id: 'lap', short: '腹腔鏡', name: '腹腔鏡課程' },
+    { id: 'acls', short: 'ACLS VR', name: 'ACLS 高級心臟救命術 VR 沉浸式教學' },
   ];
   const text = v => String(v ?? '').trim();
   function date(v) {
