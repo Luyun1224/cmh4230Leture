@@ -269,7 +269,7 @@ const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwQkTfzyyIxux8yMf93o
 
 const PHASE = 'post';               // 'pre' | 'post'
 const PHASE_LABEL = PHASE === 'pre' ? '前測' : '後測';
-const DATA = {"identity":["UGY","PGY1","PGY2","住院醫師"],"conf":["1 完全沒信心","2 不太有信心","3 普通","4 有信心","5 非常有信心"],"agree":["1 非常不同意","2 不同意","3 普通","4 同意","5 非常同意"],"ready":["1 完全沒準備好","2","3","4","5 完全準備好"],"satisfaction":["課程內容符合我的學習需求與上課前的期待","講師的示範與回饋清楚、具體且有幫助","模擬器／教具有助於我練習與學習","課程所學對我未來的臨床工作有幫助","我會推薦其他學員參加此課程"],"experience":["從未使用過","1–3 次","4–10 次","超過 10 次"],"closing":"今天辛苦啦，謝謝你的熱情參與！未來還想在中心解鎖哪些新技能？有任何心得、建議，或想對講師說的話，都歡迎寫下來，讓我們一起把課程變得更好！","courses":[{"id":"echo","name":"心臟超音波課程","short":"心臟超音波","target":"PGY2","date":"10/14（三）13:00–14:30","teacher":"曾宣靈醫師","place":"模擬兒科","expWhat":"心臟超音波（含模擬器）","priorCourse":"心臟超音波","topics":["探頭選擇與機器設定","標準切面取得（PLAX、PSAX、A4C、Subcostal）","左心室收縮功能目視評估","心包膜積液辨識","右心室大小評估","下腔靜脈（IVC）評估","休克病人床邊評估流程","實際影像判讀案例"],"worries":["探頭方向與手部操作不順","找不到切面或影像品質不佳","解剖構造辨識困難","不知道影像如何與臨床判斷連結","擔心判讀錯誤影響病人處置","沒有特別擔心"],"skills":["選擇探頭並設定心臟超音波模式與參數","取得標準切面（PLAX、PSAX、A4C、Subcostal）","目視評估左心室收縮功能","辨識心包膜積液","判斷右心室是否擴大","評估下腔靜脈（IVC）大小與呼吸變化"],"readiness":"如果明天在急診或病房，需要為病人執行床邊心臟超音波做初步評估，您覺得自己準備好了嗎？","career":false},{"id":"endo","name":"內視鏡模擬課程","short":"內視鏡","target":"PGY2","date":"10/20（二）11:00–12:00","teacher":"郭加智醫師","place":"模擬急診室","expWhat":"胃鏡（含模擬器）","priorCourse":"胃鏡／內視鏡","topics":["內視鏡設備與構造認識","握鏡姿勢與旋鈕操控","插入食道與通過幽門","胃內反轉（retroflexion）","系統化觀察與標準位置拍攝","常見病灶辨識","組織切片操作","檢查前準備與病人安全"],"worries":["鏡頭方向控制不順","無法維持清楚視野","插入食道或通過幽門困難","不熟悉系統化觀察順序","病灶辨識困難","擔心造成病人不適或併發症","沒有特別擔心"],"skills":["檢查前準備與病人安全評估（禁食、抗凝血藥物、鎮靜風險）","正確握持內視鏡並以旋鈕控制鏡頭方向","插入食道並通過幽門進入十二指腸","執行胃內反轉（retroflexion）觀察賁門與胃底","依系統化順序完整觀察並拍攝標準位置影像","辨識常見病灶（如潰瘍、出血點、腫瘤）","執行組織切片"],"readiness":"如果在上級醫師指導下，由您操作一次完整的胃鏡觀察，您覺得自己準備好了嗎？","career":false},{"id":"abd","name":"腹部超音波課程","short":"腹部超音波","target":"PGY2","date":"10/20（二）15:30–16:30","teacher":"張瑄元醫師","place":"模擬急診室","expWhat":"腹部超音波（含模擬器）","priorCourse":"腹部超音波","topics":["探頭選擇與機器設定","右上腹（肝腎介面）切面","左上腹（脾腎介面）切面","骨盆腔（膀胱周圍）切面","腹腔游離液體判讀（FAST）","膽囊與膽結石評估","腹主動脈評估","實際影像判讀案例"],"worries":["探頭方向與手部操作不順","找不到切面或影像被腸氣／肋骨遮蔽","解剖構造辨識困難","不確定是否為游離液體","擔心判讀錯誤影響病人處置","沒有特別擔心"],"skills":["依切面需求選擇探頭並設定機器參數","取得右上腹肝腎介面（Morison’s pouch）影像","取得左上腹脾腎介面影像","取得骨盆腔（膀胱周圍）影像","判斷腹腔內是否有游離液體","辨識膽囊並評估有無膽結石","測量腹主動脈直徑"],"readiness":"如果明天在急診，需要為腹部外傷或腹痛病人執行床邊腹部超音波（含 FAST）做初步評估，您覺得自己準備好了嗎？","career":false},{"id":"lap","name":"腹腔鏡課程","short":"腹腔鏡","target":"PGY1","date":"待公告","teacher":"待公告","place":"臨床技能中心","expWhat":"腹腔鏡（含模擬器、箱型訓練器、擔任扶鏡手）","priorCourse":"腹腔鏡或微創手術","topics":["腹腔鏡器械的認識與正確握持","手眼協調與器械方向感","精準夾取（夾豆子）","雙手配合（繞圈圈）","了解外科的工作與職涯","體驗 3D 模擬機","腔內縫合"],"worries":["器械方向跟手相反，手不聽使喚","畫面上判斷不出前後距離","非慣用手不靈活","縫合太難","沒有特別擔心"],"skills":["正確握持與開合腹腔鏡器械","克服支點效應，器械方向正確","在 2D 螢幕判斷深度與距離","雙手協調操作（含非慣用手）","精準夾取並放置小物件（夾豆子）","雙手配合完成繞圈圈關卡","腔內縫合"],"readiness":"若下週在手術室需要協助操作腹腔鏡器械（如拉開、抓取組織），您覺得準備好了嗎？","career":true}]};
+const DATA = {"identity":["UGY","PGY1","PGY2","住院醫師"],"conf":["1 完全沒信心","2 不太有信心","3 普通","4 有信心","5 非常有信心"],"agree":["1 非常不同意","2 不同意","3 普通","4 同意","5 非常同意"],"ready":["1 完全沒準備好","2","3","4","5 完全準備好"],"satisfaction":["課程內容符合我的學習需求與上課前的期待","講師的示範與回饋清楚、具體且有幫助","模擬器／教具有助於我練習與學習","課程所學對我未來的臨床工作有幫助","我會推薦其他學員參加此課程"],"experience":["從未使用過","1–3 次","4–10 次","超過 10 次"],"closing":"今天辛苦啦，謝謝你的熱情參與！未來還想在中心解鎖哪些新技能？有任何心得、建議，或想對講師說的話，都歡迎寫下來，讓我們一起把課程變得更好！","courses":[{"id":"echo","name":"心臟超音波課程","short":"心臟超音波","target":"PGY2","date":"10/14（三）13:00–14:30","teacher":"曾宣靈醫師","place":"模擬兒科","expWhat":"心臟超音波（含模擬器）","priorCourse":"心臟超音波","topics":["探頭選擇與機器設定","標準切面取得（PLAX、PSAX、A4C、Subcostal）","左心室收縮功能目視評估","心包膜積液辨識","右心室大小評估","下腔靜脈（IVC）評估","休克病人床邊評估流程","實際影像判讀案例"],"worries":["探頭方向與手部操作不順","找不到切面或影像品質不佳","解剖構造辨識困難","不知道影像如何與臨床判斷連結","擔心判讀錯誤影響病人處置","沒有特別擔心"],"skills":["選擇探頭並設定心臟超音波模式與參數","取得標準切面（PLAX、PSAX、A4C、Subcostal）","目視評估左心室收縮功能","辨識心包膜積液","判斷右心室是否擴大","評估下腔靜脈（IVC）大小與呼吸變化"],"readiness":"如果明天在急診或病房，需要為病人執行床邊心臟超音波做初步評估，您覺得自己準備好了嗎？","career":false},{"id":"endo","name":"內視鏡模擬課程","short":"內視鏡","target":"PGY2","date":"10/20（二）11:00–12:00","teacher":"郭加智醫師","place":"模擬急診室","expWhat":"胃鏡（含模擬器）","priorCourse":"胃鏡／內視鏡","topics":["內視鏡設備與構造認識","握鏡姿勢與旋鈕操控","插入食道與通過幽門","胃內反轉（retroflexion）","系統化觀察與標準位置拍攝","常見病灶辨識","組織切片操作","檢查前準備與病人安全"],"worries":["鏡頭方向控制不順","無法維持清楚視野","插入食道或通過幽門困難","不熟悉系統化觀察順序","病灶辨識困難","擔心造成病人不適或併發症","沒有特別擔心"],"skills":["檢查前準備與病人安全評估（禁食、抗凝血藥物、鎮靜風險）","正確握持內視鏡並以旋鈕控制鏡頭方向","插入食道並通過幽門進入十二指腸","執行胃內反轉（retroflexion）觀察賁門與胃底","依系統化順序完整觀察並拍攝標準位置影像","辨識常見病灶（如潰瘍、出血點、腫瘤）","執行組織切片"],"readiness":"如果在上級醫師指導下，由您操作一次完整的胃鏡觀察，您覺得自己準備好了嗎？","career":false},{"id":"abd","name":"腹部超音波課程","short":"腹部超音波","target":"PGY2","date":"10/20（二）15:30–16:30","teacher":"張瑄元醫師","place":"模擬急診室","expWhat":"腹部超音波（含模擬器）","priorCourse":"腹部超音波","topics":["探頭選擇與機器設定","右上腹（肝腎介面）切面","左上腹（脾腎介面）切面","骨盆腔（膀胱周圍）切面","腹腔游離液體判讀（FAST）","膽囊與膽結石評估","腹主動脈評估","實際影像判讀案例"],"worries":["探頭方向與手部操作不順","找不到切面或影像被腸氣／肋骨遮蔽","解剖構造辨識困難","不確定是否為游離液體","擔心判讀錯誤影響病人處置","沒有特別擔心"],"skills":["依切面需求選擇探頭並設定機器參數","取得右上腹肝腎介面（Morison’s pouch）影像","取得左上腹脾腎介面影像","取得骨盆腔（膀胱周圍）影像","判斷腹腔內是否有游離液體","辨識膽囊並評估有無膽結石","測量腹主動脈直徑"],"readiness":"如果明天在急診，需要為腹部外傷或腹痛病人執行床邊腹部超音波（含 FAST）做初步評估，您覺得自己準備好了嗎？","career":false},{"id":"lap","name":"腹腔鏡課程","short":"腹腔鏡","target":"PGY1","date":"待公告","teacher":"待公告","place":"臨床技能中心","expWhat":"腹腔鏡（含模擬器、箱型訓練器、擔任扶鏡手）","priorCourse":"腹腔鏡或微創手術","topics":["腹腔鏡器械的認識與正確握持","手眼協調與器械方向感","精準夾取（夾豆子）","雙手配合（繞圈圈）","了解外科的工作與職涯","體驗 3D 模擬機","腔內縫合"],"worries":["器械方向跟手相反，手不聽使喚","畫面上判斷不出前後距離","非慣用手不靈活","縫合太難","沒有特別擔心"],"skills":["正確握持與開合腹腔鏡器械","克服支點效應，器械方向正確","在 2D 螢幕判斷深度與距離","雙手協調操作（含非慣用手）","精準夾取並放置小物件（夾豆子）","雙手配合完成繞圈圈關卡","腔內縫合"],"readiness":"若下週在手術室需要協助操作腹腔鏡器械（如拉開、抓取組織），您覺得準備好了嗎？","career":true},{"id":"acls","name":"ACLS 高級心臟救命術 VR 沉浸式教學","short":"ACLS VR","target":"UGY、PGY","date":"待公告","teacher":"待公告","place":"臨床技能中心","identity":["UGY","PGY1","PGY2"],"training":["BLS","ACLS","皆未曾受訓"],"vrExp":["從未使用","1–2 次","3 次以上"],"skills":["我能迅速辨識病人心跳停止，並立即呼救、啟動急救流程。","我能執行高品質胸部按壓（速率、深度、回彈皆正確）。","我能安全且正確地操作 AED／去顫器。","我能判讀心跳停止心律（VF／pVT、PEA、Asystole）。","我能依 ACLS 流程掌握電擊與給藥的時機。","我能有系統地找出可逆病因（H's and T's）。","在急救團隊中，我能使用閉環式溝通回報與確認指令。"],"readiness":"整體而言，我有信心參與真實病人的急救處置。","vrSat":[{"t":"使用 VR 時，我感覺自己真的身處急救現場。"},{"t":"VR 裝置配戴舒適、操作容易，系統運作順暢。"},{"t":"VR 的即時回饋幫助我修正自己的處置。","k":"模擬器／教具有助於我練習與學習"},{"t":"VR 讓我更理解 ACLS 流程的先後順序與時間壓力。"},{"t":"我認為在 VR 中學到的內容，可以應用到臨床或模擬演練。","k":"課程所學對我未來的臨床工作有幫助"},{"t":"課程安排的 VR 操作時間長度恰當。"},{"t":"上課場地空間足夠，能安全地進行 VR 操作。"},{"t":"VR 設備數量充足，每位學員都有足夠的實際操作機會。"},{"t":"課程時段安排適當，不影響我的臨床實習。"},{"t":"講師／助教的引導與事後回饋（debriefing）對我有幫助。","k":"講師的示範與回饋清楚、具體且有幫助"},{"t":"整體而言，我對本次 VR 沉浸式教學感到滿意。"}],"vr":true,"career":false}]};
 
 const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -304,14 +304,29 @@ function pick(id, scroll) {
 }
 
 // ---------- question definitions ----------
+const NAME_HINT = '姓名僅用於確認誰已完成填答；您的作答內容只會以整體統計呈現，不會個別公開，也不影響任何考核，請放心如實填寫！';
 function defs(c) {
   const D = DATA, S = [];
   const sec = (title, qs) => S.push({ title, qs: qs.filter(Boolean) });
-  const lap = c.career;
+  const lap = c.career, vr = c.vr;
   if (PHASE === 'pre') {
+    if (vr) {
+      // ===== ACLS VR 沉浸式教學：依課前問卷（前測）題目 =====
+      sec('基本資料', [
+        { k: '姓名', t: 'text', label: '姓名', req: true, ph: '請填寫您的姓名', remember: 'sim_name', hint: NAME_HINT },
+        { k: '身分', t: 'radio', label: '您目前的身分', opts: c.identity, req: true, remember: 'sim_id' },
+        { k: '曾完成之急救訓練', t: 'check', label: '曾完成之急救訓練', opts: c.training, only: '皆未曾受訓', req: true, tag: '可複選' },
+        { k: 'VR使用經驗', t: 'radio', label: '使用 VR 的經驗', opts: c.vrExp, req: true },
+      ]);
+      sec('急救處置自信度', [
+        { k: '信心', t: 'likert', label: '請依您「目前」的感受，在最符合的選項作答', items: c.skills, scale: D.agree, req: true, tag: '每列選一個' },
+        { k: '臨床準備度', t: 'radio', label: c.readiness, opts: D.agree, req: true },
+      ]);
+      return S;
+    }
     sec('基本資料', [
-      { k: '姓名', t: 'text', label: '姓名', req: true, ph: '請填寫您的姓名', remember: 'sim_name', hint: '姓名僅用於確認誰已完成填答；您的作答內容只會以整體統計呈現，不會個別公開，也不影響任何考核，請放心如實填寫！' },
-      { k: '身分', t: 'radio', label: '您目前的身分', opts: D.identity, req: true, remember: 'sim_id' },
+      { k: '姓名', t: 'text', label: '姓名', req: true, ph: '請填寫您的姓名', remember: 'sim_name', hint: NAME_HINT },
+      { k: '身分', t: 'radio', label: '您目前的身分', opts: c.identity || D.identity, req: true, remember: 'sim_id' },
       { k: '操作次數', t: 'radio', label: `上課前，您實際操作${c.expWhat}的次數`, opts: D.experience, req: true },
       { k: '曾參加相關課程', t: 'radio', label: `您是否曾參加過${c.priorCourse}相關課程？`, opts: ['是', '否'], req: true,
         follow: { when: '是', k: '曾參加課程名稱', ph: '課程名稱（選填）' } },
@@ -346,9 +361,24 @@ function defs(c) {
     ]);
   } else {
     sec('基本資料', [
-      { k: '姓名', t: 'text', label: '姓名', req: true, ph: '請填寫您的姓名', remember: 'sim_name', hint: '姓名僅用於確認誰已完成填答；您的作答內容只會以整體統計呈現，不會個別公開，也不影響任何考核，請放心如實填寫！' },
-      { k: '身分', t: 'radio', label: '您目前的身分', opts: D.identity, req: true, remember: 'sim_id' },
+      { k: '姓名', t: 'text', label: '姓名', req: true, ph: '請填寫您的姓名', remember: 'sim_name', hint: NAME_HINT },
+      { k: '身分', t: 'radio', label: '您目前的身分', opts: c.identity || D.identity, req: true, remember: 'sim_id' },
     ]);
+    if (vr) {
+      // ===== ACLS VR 沉浸式教學：依課後問卷（後測）題目 =====
+      sec('急救處置自信度', [
+        { k: '信心', t: 'likert', label: '請依您「完成本課程後」的感受，在最符合的選項作答', items: c.skills, scale: D.agree, req: true, tag: '每列選一個' },
+        { k: '臨床準備度', t: 'radio', label: c.readiness, opts: D.agree, req: true },
+      ]);
+      sec('VR 使用經驗與滿意度', [
+        { k: '滿意度', t: 'likert', label: '請依本次課程經驗，在最符合的選項作答', items: c.vrSat, scale: D.agree, req: true, tag: '每列選一個' },
+        { k: 'VR不適', t: 'radio', label: '使用 VR 期間或結束後，是否有頭暈、噁心、眼睛疲勞等不適？', opts: ['無', '輕微', '明顯'], req: true },
+      ]);
+      sec('意見與建議', [
+        { k: '回饋與建議', t: 'area', label: '您覺得本次 VR 課程最有幫助的部分，或需要改進的地方？', req: false, ph: '任何心得或建議都很歡迎！' },
+      ]);
+      return S;
+    }
     if (lap) {
       // ===== 腹腔鏡：講師 2.0 版題目 =====
       const IMP = ['明顯提高', '稍微提高', '沒有影響', '稍微降低', '明顯降低'];
@@ -492,6 +522,10 @@ function isDone(q) {
 function onChange(e) {
   const qEl = e.target.closest('.q'); if (!qEl) return;
   const q = questions.find(x => x.n === Number(qEl.dataset.n));
+  if (q.t === 'check' && q.only && e.target.matches('.chips input') && e.target.checked) {
+    // 互斥選項：勾「皆未曾受訓」會取消其他選項，反之亦然。
+    qEl.querySelectorAll('.chips input').forEach(b => { if (b !== e.target && (e.target.value === q.only || b.value === q.only)) b.checked = false; });
+  }
   if (q.t === 'check' && q.max) {
     const boxes = [...qEl.querySelectorAll('.chips input')];
     const n = boxes.filter(b => b.checked).length;
